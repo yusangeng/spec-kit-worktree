@@ -12,7 +12,9 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
+DIM='\033[2m'
 
 show_help() {
     cat << EOF
@@ -238,7 +240,7 @@ else
     echo -e "  Branch: $NEW_BRANCH"
     echo -e "  Directory: $WORKTREE_DIR"
     echo -e "  Base: $BASE_BRANCH"
-    echo -e "\n${dim}Next steps:${NC}"
-    echo -e "  1. ${cyan}cd $WORKTREE_DIR${NC}"
+    echo -e "\n${DIM}Next steps:${NC}"
+    echo -e "  1. ${CYAN}cd $WORKTREE_DIR${NC}"
     echo -e "  2. Start developing your feature"
 fi

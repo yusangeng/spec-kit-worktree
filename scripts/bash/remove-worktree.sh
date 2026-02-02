@@ -12,6 +12,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 show_help() {
@@ -171,9 +172,9 @@ if [ "$CURRENT_BRANCH" = "$FEATURE_BRANCH" ]; then
     else
         echo -e "${RED}Error: Cannot delete branch '$FEATURE_BRANCH' while in the worktree${NC}" >&2
         echo -e "  Please run:" >&2
-        echo -e "    ${cyan}git checkout main${NC}" >&2
-        echo -e "    ${cyan}cd ..${NC}" >&2
-        echo -e "    ${cyan}remove-worktree.sh $FEATURE_NAME${NC}" >&2
+        echo -e "    ${CYAN}git checkout main${NC}" >&2
+        echo -e "    ${CYAN}cd ..${NC}" >&2
+        echo -e "    ${CYAN}remove-worktree.sh $FEATURE_NAME${NC}" >&2
     fi
     exit 1
 fi

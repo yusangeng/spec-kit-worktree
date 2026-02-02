@@ -25,14 +25,13 @@
 
 ```
 官方版本：需要频繁切换分支
-  develop feature-1 → 开发 → 切换到 feature-2 → 开发 → 切换回 feature-1
-  (来回切换，容易混乱)
+  开发 feature-1 → git checkout feature-2 → 开发 → git checkout feature-1
+  (来回切换，容易忘记改了什么)
 
 Worktree版本：并行开发，无需切换
-  终端1: .wt/feature-1/  → 开发特性1
-  终端2: .wt/feature-2/  → 开发特性2
-  终端3: .wt/feature-3/  → 开发特性3
-  (同时进行，互不干扰)
+  终端1: .wt/feature-1/  → 开发特性1（始终保持在这个分支）
+  终端2: .wt/feature-2/  → 开发特性2（始终保持在这个分支）
+  (同时进行，各自独立，互不干扰)
 ```
 
 ### 关于 Spec Kit
@@ -49,29 +48,34 @@ Spec Kit 是一个**规范驱动开发（Spec-Driven Development）**工具包�
 
 ## 🎯 这个版本多了什么功能？
 
-### ✨ 新增功能：Git Worktree 支持
+### ✨ 新增功能：自动管理 Worktree
 
-#### 1. 并行开发多个特性
+当你使用 `/speckit.specify` 创建新特性时，本版本会**自动**创建独立的 Worktree 目录：
 
-```bash
-# 同时开发三个特性，互不干扰
-.specify/scripts/bash/create-worktree.sh user-auth      # 特性1：用户认证
-.specify/scripts/bash/create-worktree.sh payment         # 特性2：支付功能
-.specify/scripts/bash/create-worktree.sh notification    # 特性3：通知系统
+```
+你只需要：
+  /speckit.specify 添加用户登录功能
 
-# 查看所有 worktree
-.specify/scripts/bash/list-worktrees.sh
+AI 助手自动做：
+  1. 创建 .wt/user-login/ 目录
+  2. 创建 feature/user-login 分支
+  3. 在 worktree 中创建规范文件
+  4. 进入 worktree 目录开始工作
 
-# 在不同终端中同时开发
-cd .wt/user-auth       # 终端1：开发用户认证
-cd .wt/payment         # 终端2：开发支付功能
-cd .wt/notification    # 终端3：开发通知系统
+结果：
+  - 你可以在 .wt/user-login/ 中开发
+  - 主分支保持干净
+  - 可以同时开发多个特性（多个终端，多个 worktree）
 ```
 
-#### 2. 跨平台支持
+### 与官方版本的对比
 
-- **Linux/macOS**: Bash 脚本（`.sh`）
-- **Windows**: PowerShell 脚本（`.ps1`）
+| 场景 | 官方 Spec Kit | Spec Kit Worktree |
+|------|--------------|-------------------|
+| 创建特性 | `/speckit.specify` → 创建分支 | `/speckit.specify` → **自动创建 worktree** |
+| 开发特性 A | 在主分支开发，频繁 checkout | 在 `.wt/feature-a/` 开发，无需切换 |
+| 同时开发特性 B | 需要先 checkout 到 B 分支 | 打开新终端，在 `.wt/feature-b/` 开发 |
+| 切换上下文 | `git checkout`（可能丢失未提交的修改） | `cd .wt/feature-b/`（各自独立，不影响） |
 
 ---
 
@@ -98,72 +102,72 @@ cd my-project
 specify-worktree init . --worktree --ai claude
 ```
 
-### 第 3 步：创建第一个特性
+### 第 3 步：启动 AI 助手
 
 ```bash
-# 方式一：使用 AI 助手（推荐）
-# 启动 Claude Code，然后输入：
-/speckit.specify 添加用户登录功能
-
-# 这会自动创建 worktree，你可以看到创建的目录：
-# .wt/user-login/
-
-# 方式二：手动创建 worktree
-.specify/scripts/bash/create-worktree.sh my-feature
-
-# 进入 worktree 目录
-cd .wt/my-feature
+cd my-project
+# 启动 Claude Code（或其他支持的 AI 助手）
 ```
 
-### 第 4 步：并行开发多个特性
+### 第 4 步：创建第一个特性（自动创建 Worktree）
 
-```bash
-# 打开多个终端窗口
+在 AI 助手中输入：
 
-# 终端1：开发用户认证
-.specify/scripts/bash/create-worktree.sh user-auth
-cd .wt/user-auth
-/speckit.specify 添加用户认证功能
-
-# 终端2：同时开发支付功能（切换到另一个终端）
-.specify/scripts/bash/create-worktree.sh payment
-cd .wt/payment
-/speckit.specify 添加支付功能
-
-# 两个特性完全独立，互不干扰！
+```
+/speckit.specify 添加用户登录功能，包括邮箱登录和注册
 ```
 
-### 第 5 步：完成开发后清理
+**AI 助手会自动：**
+1. ✅ 创建 `.wt/user-login/` 目录
+2. ✅ 创建 `feature/user-login` 分支
+3. ✅ 在 worktree 中创建规范文件
+4. ✅ 进入 worktree 目录
 
-```bash
-# 查看所有 worktree
-.specify/scripts/bash/list-worktrees.sh
+你现在可以在 `.wt/user-login/` 中开发了！
 
-# 删除已完成的 worktree
-.specify/scripts/bash/remove-worktree.sh user-auth
+### 第 5 步：并行开发多个特性
+
+打开多个终端窗口，**每个窗口开发一个特性**：
+
 ```
+终端1：
+  cd my-project  （如果是新终端）
+  /speckit.specify 添加用户认证功能
+  → AI 自动创建 .wt/user-auth/，你在这里开发
+
+终端2：（不关闭终端1）
+  cd my-project  （如果是新终端）
+  /speckit.specify 添加支付功能
+  → AI 自动创建 .wt/payment/，你在这里开发
+
+终端3：（继续）
+  cd my-project
+  /speckit.specify 添加通知系统
+  → AI 自动创建 .wt/notification/，你在这里开发
+
+三个特性完全独立，互不干扰！
+```
+
+### 第 6 步：继续 SDD 流程
+
+在 AI 助手中继续使用命令：
+
+```
+/speckit.plan       # 创建技术方案
+/speckit.tasks      # 生成任务列表
+/speckit.implement  # 执行实现
+```
+
+所有操作都在当前 worktree 中进行，无需手动切换分支。
 
 ---
 
 ## 🔧 常用命令
 
-### Worktree 管理
-
-```bash
-# 创建 worktree
-.specify/scripts/bash/create-worktree.sh <feature-name>
-
-# 列出所有 worktree
-.specify/scripts/bash/list-worktrees.sh
-
-# 删除 worktree
-.specify/scripts/bash/remove-worktree.sh <feature-name>
-```
-
 ### CLI 命令
 
 ```bash
-# 初始化项目
+# 初始化项目（启用 worktree）
 specify-worktree init <project-name> --worktree --ai claude
 
 # 在当前目录初始化
@@ -173,18 +177,17 @@ specify-worktree init . --worktree
 specify-worktree check
 ```
 
-### Windows 用户（PowerShell）
+### Slash 命令（在 AI 助手中使用）
 
-```bash
-# 创建 worktree
-.specify/scripts/powershell/Create-Worktree.ps1 <feature-name>
-
-# 列出所有 worktree
-.specify/scripts/powershell/List-Worktrees.ps1
-
-# 删除 worktree
-.specify/scripts/powershell/Remove-Worktree.ps1 <feature-name>
 ```
+/speckit.constitution  - 建立项目原则
+/speckit.specify       - 定义功能需求（会自动创建 worktree）
+/speckit.plan          - 创建技术方案
+/speckit.tasks         - 生成任务列表
+/speckit.implement     - 执行实现
+```
+
+**重要**：你只需要使用这些 `/speckit.*` 命令，worktree 的创建和管理都是自动的！
 
 ---
 
@@ -196,6 +199,25 @@ specify-worktree check
 ✅ **大型项目** - 切换分支成本高
 ✅ **频繁上下文切换** - 需要在不同特性间快速切换
 ✅ **团队协作** - 多人同时开发，减少分支冲突
+
+### 典型工作流程
+
+```
+早上：
+  /speckit.specify 实现用户认证
+  → 在 .wt/user-auth/ 开发
+
+下午：
+  需要紧急修复另一个问题，打开新终端
+  /speckit.specify 修复支付页面bug
+  → 在 .wt/fix-payment/ 开发
+  → user-auth 的修改不受影响（在不同目录）
+
+晚上：
+  继续开发用户认证
+  cd .wt/user-auth
+  → 所有修改都还在，没有冲突
+```
 
 ### 使用官方版本即可
 
@@ -213,18 +235,6 @@ specify-worktree check
 
 - **[官方文档](https://github.github.io/spec-kit/)** - 完整的方法论和教程
 - **[详细步骤](https://github.github.io/spec-kit/#-detailed-process)** - 完整的 walkthrough
-
-### Slash 命令
-
-启动 AI 助手后，可使用：
-
-```
-/speckit.constitution  - 建立项目原则
-/speckit.specify       - 定义功能需求（自动创建 worktree）
-/speckit.plan          - 创建技术方案
-/speckit.tasks         - 生成任务列表
-/speckit.implement     - 执行实现
-```
 
 ### AI 助手支持
 
@@ -261,7 +271,7 @@ MIT License - 与官方 Spec Kit 相同
 - John Lam ([@jflam](https://github.com/jflam))
 - Den Delimarsky ([@localden](https://github.com/localden))
 
-本版本仅增加 Git Worktree 支持，所有核心功能归功于官方团队。
+本版本仅增加 Git Worktree 自动化管理，所有核心功能归功于官方团队。
 
 ---
 

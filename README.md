@@ -79,11 +79,11 @@ AI 助手自动做：
 
 ```bash
 # 1. 克隆代码
-git clone https://github.com/YOUR_USERNAME/spec-kit.git
+git clone https://github.com/yusangeng/spec-kit-worktree.git
 cd spec-kit
 
-# 2. 安装依赖（可编辑模式）
-uv pip install -e .
+# 2. 安装工具（uv 会自动安装依赖并注册全局命令）
+uv tool install .
 
 # 3. 验证安装
 specify-worktree check

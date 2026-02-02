@@ -1,23 +1,17 @@
 <div align="center">
-    <img src="./media/logo_large.webp" alt="Spec Kit Logo" width="200" height="200"/>
     <h1>🌱 Spec Kit Worktree</h1>
     <h3><em>Spec Kit 的 Git Worktree 增强版</em></h3>
 </div>
 
 <p align="center">
-    <strong>基于官方 Spec Kit，增加 Git Worktree 支持，实现真正的并行特性开发</strong>
-</p>
-
-<p align="center">
-    <a href="https://github.com/github/spec-kit"><img src="https://img.shields.io/badge/base_official-spec--kit-blue" alt="Based on official spec-kit"/></a>
-    <a href="https://github.com/github/spec-kit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/github/spec-kit" alt="License"/></a>
+    <strong>基于官方 Spec Kit，增加 Git Worktree 支持，实现并行特性开发</strong>
 </p>
 
 ---
 
 ## 📖 什么是 Spec Kit Worktree？
 
-**Spec Kit Worktree** 是 [github/spec-kit](https://github.com/github/spec-kit) 的增强版本，新增了 **Git Worktree 支持**。
+**Spec Kit Worktree** 是 [github/spec-kit](https://github.com/github/spec-kit) 的特化版本，新增了 **Git Worktree 支持**。
 
 ### 核心功能：并行开发多个特性
 
@@ -70,26 +64,32 @@ AI 助手自动做：
 
 ### 与官方版本的对比
 
-| 场景 | 官方 Spec Kit | Spec Kit Worktree |
-|------|--------------|-------------------|
-| 创建特性 | `/speckit.specify` → 创建分支 | `/speckit.specify` → **自动创建 worktree** |
-| 开发特性 A | 在主分支开发，频繁 checkout | 在 `.wt/feature-a/` 开发，无需切换 |
-| 同时开发特性 B | 需要先 checkout 到 B 分支 | 打开新终端，在 `.wt/feature-b/` 开发 |
-| 切换上下文 | `git checkout`（可能丢失未提交的修改） | `cd .wt/feature-b/`（各自独立，不影响） |
+| 场景           | 官方 Spec Kit                          | Spec Kit Worktree                          |
+| -------------- | -------------------------------------- | ------------------------------------------ |
+| 创建特性       | `/speckit.specify` → 创建分支          | `/speckit.specify` → **自动创建 worktree** |
+| 开发特性 A     | 在主分支开发，频繁 checkout            | 在 `.wt/feature-a/` 开发，无需切换         |
+| 同时开发特性 B | 需要先 checkout 到 B 分支              | 打开新终端，在 `.wt/feature-b/` 开发       |
+| 切换上下文     | `git checkout`（可能丢失未提交的修改） | `cd .wt/feature-b/`（各自独立，不影响）    |
 
 ---
 
 ## ⚡ 快速开始
 
-### 第 1 步：安装 CLI
+### 第 1 步：下载并安装 CLI
 
 ```bash
-# 使用 uv 安装
-uv tool install specify-worktree-cli --from git+https://github.com/YOUR_USERNAME/spec-kit.git
+# 1. 克隆代码
+git clone https://github.com/YOUR_USERNAME/spec-kit.git
+cd spec-kit
 
-# 验证安装
+# 2. 安装依赖（可编辑模式）
+uv pip install -e .
+
+# 3. 验证安装
 specify-worktree check
 ```
+
+现在 `specify-worktree` 命令已经在系统中可用，可以在任何目录使用。
 
 ### 第 2 步：初始化项目（启用 Worktree）
 
@@ -118,6 +118,7 @@ cd my-project
 ```
 
 **AI 助手会自动：**
+
 1. ✅ 创建 `.wt/user-login/` 目录
 2. ✅ 创建 `feature/user-login` 分支
 3. ✅ 在 worktree 中创建规范文件
@@ -191,91 +192,13 @@ specify-worktree check
 
 ---
 
-## 💡 使用场景
-
-### 适合使用本版本
-
-✅ **同时开发多个特性** - 如用户认证 + 支付 + 通知
-✅ **大型项目** - 切换分支成本高
-✅ **频繁上下文切换** - 需要在不同特性间快速切换
-✅ **团队协作** - 多人同时开发，减少分支冲突
-
-### 典型工作流程
-
-```
-早上：
-  /speckit.specify 实现用户认证
-  → 在 .wt/user-auth/ 开发
-
-下午：
-  需要紧急修复另一个问题，打开新终端
-  /speckit.specify 修复支付页面bug
-  → 在 .wt/fix-payment/ 开发
-  → user-auth 的修改不受影响（在不同目录）
-
-晚上：
-  继续开发用户认证
-  cd .wt/user-auth
-  → 所有修改都还在，没有冲突
-```
-
-### 使用官方版本即可
-
-✅ **小型项目** - 分支切换成本低
-✅ **顺序开发** - 一次只开发一个特性
-✅ **不熟悉 Git Worktree** - 团队不熟悉 worktree 概念
-
----
-
-## 📚 学习更多
-
-### 核心 SDD 方法论
-
-所有 `/speckit.*` 命令与官方版本完全一致：
-
-- **[官方文档](https://github.github.io/spec-kit/)** - 完整的方法论和教程
-- **[详细步骤](https://github.github.io/spec-kit/#-detailed-process)** - 完整的 walkthrough
-
-### AI 助手支持
-
-支持所有官方 AI Agents：
-- Claude Code, Gemini CLI, Cursor, GitHub Copilot, Windsurf, Qwen, 等等
-
----
-
-## 🤝 贡献
-
-本项目是 Spec Kit 的独立分支版本。
-
-- **上游项目**: [github/spec-kit](https://github.com/github/spec-kit)
-- **本仓库**: [YOUR_USERNAME/spec-kit](https://github.com/YOUR_USERNAME/spec-kit)
-
-### 提交 Issue
-
-- **worktree 相关问题** → 在本仓库提交 Issue
-- **SDD 方法论问题** → 在官方仓库提交 Issue
-
----
-
 ## 📄 许可证
 
 MIT License - 与官方 Spec Kit 相同
 
 ---
 
-## 🙏 致谢
-
-本项目基于 [github/spec-kit](https://github.com/github/spec-kit) 的优秀工作，核心 SDD 方法论和 `/speckit.*` 命令完全来自官方项目。
-
-特别感谢：
-- John Lam ([@jflam](https://github.com/jflam))
-- Den Delimarsky ([@localden](https://github.com/localden))
-
-本版本仅增加 Git Worktree 自动化管理，所有核心功能归功于官方团队。
-
----
-
 ## 📞 支持
 
-- **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/spec-kit/issues)
-- **官方文档**: [spec-kit.github.io](https://github.github.io/spec-kit/)
+- **Issues**: [GitHub Issues](https://github.com/yusangeng/spec-kit-worktree/issues)
+- **原版官方文档**: [spec-kit.github.io](https://github.github.io/spec-kit/)

@@ -51,28 +51,31 @@ Choose your preferred installation method:
 Install once and use everywhere:
 
 ```bash
-uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+uv tool install specify-worktree-cli --from git+https://github.com/github/spec-kit.git
 ```
 
 Then use the tool directly:
 
 ```bash
 # Create new project
-specify init <PROJECT_NAME>
+specify-worktree init <PROJECT_NAME>
+
+# Create new project with worktree mode enabled
+specify-worktree init <PROJECT_NAME> --worktree
 
 # Or initialize in existing project
-specify init . --ai claude
+specify-worktree init . --ai claude
 # or
-specify init --here --ai claude
+specify-worktree init --here --ai claude
 
 # Check installed tools
-specify check
+specify-worktree check
 ```
 
 To upgrade Specify, see the [Upgrade Guide](./docs/upgrade.md) for detailed instructions. Quick upgrade:
 
 ```bash
-uv tool install specify-cli --force --from git+https://github.com/github/spec-kit.git
+uv tool install specify-worktree-cli --force --from git+https://github.com/github/spec-kit.git
 ```
 
 #### Option 2: One-time Usage
@@ -80,7 +83,7 @@ uv tool install specify-cli --force --from git+https://github.com/github/spec-ki
 Run directly without installing:
 
 ```bash
-uvx --from git+https://github.com/github/spec-kit.git specify init <PROJECT_NAME>
+uvx --from git+https://github.com/github/spec-kit.git specify-worktree init <PROJECT_NAME>
 ```
 
 **Benefits of persistent installation:**
@@ -165,7 +168,7 @@ Want to see Spec Kit in action? Watch our [video overview](https://www.youtube.c
 
 ## 🔧 Specify CLI Reference
 
-The `specify` command supports the following options:
+The `specify-worktree` command supports the following options:
 
 ### Commands
 
@@ -174,7 +177,51 @@ The `specify` command supports the following options:
 | `init`  | Initialize a new Specify project from the latest template                                                                                               |
 | `check` | Check for installed tools (`git`, `claude`, `gemini`, `code`/`code-insiders`, `cursor-agent`, `windsurf`, `qwen`, `opencode`, `codex`, `shai`, `qoder`) |
 
-### `specify init` Arguments & Options
+### Worktree Mode
+
+Specify CLI supports **worktree mode** for parallel feature development. When enabled, each feature gets its own isolated git worktree, allowing you to work on multiple features simultaneously without constantly switching branches.
+
+#### Enabling Worktree Mode
+
+```bash
+# Initialize with worktree mode
+specify-worktree init my-project --worktree
+
+# Initialize with worktree mode and specific AI assistant
+specify-worktree init my-project --ai claude --worktree
+```
+
+#### Worktree Scripts
+
+When worktree mode is enabled, the following bash scripts are available in `.specify/scripts/bash/`:
+
+- **`create-worktree.sh <feature-name>`** - Create a new worktree for feature development
+- **`list-worktrees.sh`** - List all worktrees managed by spec-kit
+- **`remove-worktree.sh <feature-name>`** - Remove a worktree and its branch
+
+PowerShell versions are available in `.specify/scripts/powershell/` for Windows users:
+
+- **`Create-Worktree.ps1 <feature-name>`**
+- **`List-Worktrees.ps1`**
+- **`Remove-Worktree.ps1 <feature-name>`**
+
+#### Example Workflow
+
+```bash
+# Create a worktree for a new feature
+.specify/scripts/bash/create-worktree.sh user-auth
+
+# Work on the feature in the isolated worktree
+cd .wt/user-auth
+
+# List all worktrees
+.specify/scripts/bash/list-worktrees.sh
+
+# When done, remove the worktree
+.specify/scripts/bash/remove-worktree.sh user-auth
+```
+
+### `specify-worktree init` Arguments & Options
 
 | Argument/Option        | Type     | Description                                                                                                                                                                                  |
 | ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -188,58 +235,65 @@ The `specify` command supports the following options:
 | `--skip-tls`           | Flag     | Skip SSL/TLS verification (not recommended)                                                                                                                                                  |
 | `--debug`              | Flag     | Enable detailed debug output for troubleshooting                                                                                                                                             |
 | `--github-token`       | Option   | GitHub token for API requests (or set GH_TOKEN/GITHUB_TOKEN env variable)                                                                                                                    |
+| `--worktree`           | Flag     | Enable worktree mode for parallel feature development (creates isolated git worktrees for each feature)                                                                                      |
 
 ### Examples
 
 ```bash
 # Basic project initialization
-specify init my-project
+specify-worktree init my-project
+
+# Initialize with worktree mode enabled
+specify-worktree init my-project --worktree
 
 # Initialize with specific AI assistant
-specify init my-project --ai claude
+specify-worktree init my-project --ai claude
+
+# Initialize with worktree mode and specific AI assistant
+specify-worktree init my-project --ai claude --worktree
 
 # Initialize with Cursor support
-specify init my-project --ai cursor-agent
+specify-worktree init my-project --ai cursor-agent
 
 # Initialize with Qoder support
-specify init my-project --ai qoder
+specify-worktree init my-project --ai qoder
 
 # Initialize with Windsurf support
-specify init my-project --ai windsurf
+specify-worktree init my-project --ai windsurf
 
 # Initialize with Amp support
-specify init my-project --ai amp
+specify-worktree init my-project --ai amp
 
 # Initialize with SHAI support
-specify init my-project --ai shai
+specify-worktree init my-project --ai shai
 
 # Initialize with IBM Bob support
-specify init my-project --ai bob
+specify-worktree init my-project --ai bob
 
 # Initialize with PowerShell scripts (Windows/cross-platform)
-specify init my-project --ai copilot --script ps
+specify-worktree init my-project --ai copilot --script ps
 
 # Initialize in current directory
-specify init . --ai copilot
+specify-worktree init . --ai copilot
 # or use the --here flag
-specify init --here --ai copilot
+specify-worktree init --here --ai copilot
 
 # Force merge into current (non-empty) directory without confirmation
-specify init . --force --ai copilot
+specify-worktree init . --force --ai copilot
 # or
-specify init --here --force --ai copilot
+specify-worktree init --here --force --ai copilot
 
 # Skip git initialization
-specify init my-project --ai gemini --no-git
+specify-worktree init my-project --ai gemini --no-git
 
 # Enable debug output for troubleshooting
-specify init my-project --ai claude --debug
+specify-worktree init my-project --ai claude --debug
 
 # Use GitHub token for API requests (helpful for corporate environments)
-specify init my-project --ai claude --github-token ghp_your_token_here
+specify-worktree init my-project --ai claude --github-token ghp_your_token_here
 
 # Check system requirements
-specify check
+specify-worktree check
 ```
 
 ### Available Slash Commands
@@ -342,19 +396,19 @@ If you encounter issues with an agent, please open an issue so we can refine the
 You can use the Specify CLI to bootstrap your project, which will bring in the required artifacts in your environment. Run:
 
 ```bash
-specify init <project_name>
+specify-worktree init <project_name>
 ```
 
 Or initialize in the current directory:
 
 ```bash
-specify init .
+specify-worktree init .
 # or use the --here flag
-specify init --here
+specify-worktree init --here
 # Skip confirmation when the directory already has files
-specify init . --force
+specify-worktree init . --force
 # or
-specify init --here --force
+specify-worktree init --here --force
 ```
 
 ![Specify CLI bootstrapping a new project in the terminal](./media/specify_cli.gif)
@@ -362,29 +416,29 @@ specify init --here --force
 You will be prompted to select the AI agent you are using. You can also proactively specify it directly in the terminal:
 
 ```bash
-specify init <project_name> --ai claude
-specify init <project_name> --ai gemini
-specify init <project_name> --ai copilot
+specify-worktree init <project_name> --ai claude
+specify-worktree init <project_name> --ai gemini
+specify-worktree init <project_name> --ai copilot
 
 # Or in current directory:
-specify init . --ai claude
-specify init . --ai codex
+specify-worktree init . --ai claude
+specify-worktree init . --ai codex
 
 # or use --here flag
-specify init --here --ai claude
-specify init --here --ai codex
+specify-worktree init --here --ai claude
+specify-worktree init --here --ai codex
 
 # Force merge into a non-empty current directory
-specify init . --force --ai claude
+specify-worktree init . --force --ai claude
 
 # or
-specify init --here --force --ai claude
+specify-worktree init --here --force --ai claude
 ```
 
 The CLI will check if you have Claude Code, Gemini CLI, Cursor CLI, Qwen CLI, opencode, Codex CLI, Qoder CLI, or Amazon Q Developer CLI installed. If you do not, or you prefer to get the templates without checking for the right tools, use `--ignore-agent-tools` with your command:
 
 ```bash
-specify init <project_name> --ai claude --ignore-agent-tools
+specify-worktree init <project_name> --ai claude --ignore-agent-tools
 ```
 
 ### **STEP 1:** Establish project principles

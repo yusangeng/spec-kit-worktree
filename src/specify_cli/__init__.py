@@ -942,6 +942,259 @@ def ensure_executable_scripts(project_path: Path, tracker: StepTracker | None = 
             for f in failures:
                 console.print(f"  - {f}")
 
+def generate_worktree_commands(dest: Path, ai_assistant: str) -> None:
+    """Generate worktree-specific versions of speckit commands.
+
+    This function reads the standard command templates and modifies them
+    to integrate worktree workflow, specifically adding worktree creation
+    logic to the specify command and worktree auto-detection to plan/tasks/implement.
+
+    Args:
+        dest: Project root directory
+        ai_assistant: AI assistant being used (claude, copilot, etc.)
+    """
+    import re
+
+    # Paths
+    commands_dir = dest / ".claude" / "commands"
+    if not commands_dir.exists():
+        raise FileNotFoundError(f"Commands directory not found: {commands_dir}")
+
+    # Process each command file
+    for cmd_file in ["specify.md", "plan.md", "tasks.md", "implement.md"]:
+        cmd_path = commands_dir / f"speckit.{cmd_file}"
+        if not cmd_path.exists():
+            console.print(f"[yellow]Warning:[/yellow] Command file not found: {cmd_path}")
+            continue
+
+        # Read the existing command
+        content = cmd_path.read_text()
+
+        # Add worktree mode to frontmatter
+        if "---" in content:
+            # Find the frontmatter section
+            frontmatter_end = content.find("---", 3)  # Skip first "---"
+            if frontmatter_end == -1:
+                frontmatter_end = content.find("\n\n")
+
+            frontmatter = content[:frontmatter_end]
+            body = content[frontmatter_end:]
+
+            # Add mode indicator to frontmatter
+            if "mode:" not in frontmatter:
+                # Insert mode before the closing ---
+                frontmatter = frontmatter.rstrip().rstrip("---").rstrip() + "\nmode: worktree\n---\n"
+                content = frontmatter + body
+
+        # Modify command content based on type
+        if cmd_file == "specify.md":
+            # Add worktree creation logic at the beginning of execution
+            worktree_logic = '''
+### Preprocessing: Create Worktree
+
+1. **Generate feature short name**:
+   - Extract key terms from user input
+   - Convert to kebab-case (e.g., "用户认证" → "user-auth")
+
+2. **Navigate to repository root**:
+   ```bash
+   cd "$(git rev-parse --show-toplevel)"
+   ```
+
+3. **Create worktree**:
+   ```bash
+   specify worktree-create $FEATURE_SHORT_NAME
+   ```
+
+4. **Change to worktree directory**:
+   ```bash
+   cd .wt/$FEATURE_SHORT_NAME
+   ```
+
+---
+
+'''
+            # Insert after the frontmatter
+            if "---" in content:
+                parts = content.split("---", 2)
+                if len(parts) >= 3:
+                    content = parts[0] + "---" + parts[1] + "---" + worktree_logic + parts[2]
+
+        else:  # plan.md, tasks.md, implement.md
+            # Add worktree auto-detection logic at the beginning
+            worktree_detection = '''
+### Preprocessing: Auto-detect Worktree
+
+Before executing the main workflow, locate the appropriate worktree:
+
+```bash
+# Find the spec file in any worktree
+SPEC_FILE=$(find ../../.wt -name "spec.md" -type f 2>/dev/null | head -1)
+
+if [[ -z "$SPEC_FILE" ]]; then
+  echo "Error: No spec.md found in worktrees"
+  echo "Please run /speckit.specify first to create a worktree"
+  exit 1
+fi
+
+# Extract worktree directory from spec file path
+WORKTREE_DIR=$(dirname $(dirname $(dirname "$SPEC_FILE")))
+
+# Change to the worktree directory
+cd "$WORKTREE_DIR"
+
+echo "Working in worktree: $WORKTREE_DIR"
+```
+
+---
+
+'''
+            # Insert after the frontmatter
+            if "---" in content:
+                parts = content.split("---", 2)
+                if len(parts) >= 3:
+                    content = parts[0] + "---" + parts[1] + "---" + worktree_detection + parts[2]
+
+        # Write the modified command back
+        cmd_path.write_text(content)
+
+    # Update allowed-tools in frontmatter to include worktree commands
+    for cmd_file in commands_dir.glob("speckit.*.md"):
+        content = cmd_file.read_text()
+
+        # Add worktree commands to allowed-tools if present
+        if "allowed-tools:" in content:
+            # Add worktree-create to allowed-tools for specify.md
+            if "specify.md" in cmd_file.name:
+                if "specify worktree-create" not in content:
+                    content = content.replace(
+                        "allowed-tools:",
+                        "allowed-tools:\n  - Bash(specify worktree-create:*)"
+                    )
+            # Add worktree detection to other commands
+            elif "spec.md" not in cmd_file.name:
+                if "find ../../.wt" not in content and "allowed-tools:" in content:
+                    if "Bash(find:*)" not in content:
+                        content = content.replace(
+                            "allowed-tools:",
+                            "allowed-tools:\n  - Bash(find:*)"
+                        )
+
+        cmd_file.write_text(content)
+
+
+def configure_worktree_mode(project_path: Path, ai_assistant: str, verbose: bool = False, tracker: StepTracker = None) -> None:
+    """Configure project for worktree mode.
+
+    This function:
+    1. Creates .wt directory for worktrees
+    2. Adds .wt/ to .gitignore
+    3. Modifies speckit commands to integrate worktree workflow
+    4. Copies speckit standards template to agent directory
+
+    Args:
+        project_path: Path to the project root
+        ai_assistant: AI assistant being used
+        verbose: Enable verbose output
+        tracker: Optional StepTracker for progress tracking
+    """
+    if verbose:
+        console.print(f"[cyan]Configuring worktree mode for:[/cyan] {project_path}")
+
+    # Step 1: Create .wt directory and add to gitignore
+    if tracker:
+        tracker.start("worktree-dir")
+
+    worktree_dir = project_path / ".wt"
+    worktree_dir.mkdir(parents=True, exist_ok=True)
+
+    # Add .wt/ to .gitignore
+    gitignore = project_path / ".gitignore"
+    wt_entry = ".wt/"
+
+    if gitignore.exists():
+        content = gitignore.read_text()
+        if wt_entry not in content and ".wt" not in content:
+            with open(gitignore, "a") as f:
+                f.write(f"\n{wt_entry}\n")
+            if verbose:
+                console.print(f"[cyan]Added .wt/ to .gitignore[/cyan]")
+    else:
+        with open(gitignore, "w") as f:
+            f.write(f"{wt_entry}\n")
+        if verbose:
+            console.print(f"[cyan]Created .gitignore with .wt/ entry[/cyan]")
+
+    if tracker:
+        tracker.complete("worktree-dir", "created")
+
+    # Step 2: Generate worktree-specific commands
+    if tracker:
+        tracker.start("worktree-cmds")
+
+    try:
+        generate_worktree_commands(project_path, ai_assistant)
+        if tracker:
+            tracker.complete("worktree-cmds", "generated")
+        if verbose:
+            console.print(f"[cyan]Generated worktree-specific speckit commands[/cyan]")
+    except Exception as e:
+        if tracker:
+            tracker.error("worktree-cmds", str(e))
+        raise
+
+    # Step 3: Create a marker file to indicate worktree mode
+    if tracker:
+        tracker.start("worktree-marker")
+
+    marker_file = project_path / ".specify" / "worktree-mode"
+    marker_file.parent.mkdir(parents=True, exist_ok=True)
+    marker_file.write_text(f"# Worktree mode enabled\n# AI Assistant: {ai_assistant}\n")
+
+    if tracker:
+        tracker.complete("worktree-marker", "created")
+
+    # Step 4: Copy speckit standards template to agent directory
+    if tracker:
+        tracker.start("standards-file")
+
+    try:
+        # Get agent configuration folder
+        agent_config = AGENT_CONFIG.get(ai_assistant)
+        if not agent_config:
+            raise ValueError(f"Unknown AI assistant: {ai_assistant}")
+
+        agent_folder = agent_config["folder"].rstrip("/")
+        agent_dir = project_path / agent_folder
+
+        # Ensure agent directory exists
+        agent_dir.mkdir(parents=True, exist_ok=True)
+
+        # Template file path (in .specify/templates/)
+        template_src = project_path / ".specify" / "templates" / "speckit-standards-template.md"
+
+        # Destination file path
+        standards_dst = agent_dir / "speckit-standards.md"
+
+        # Copy file
+        if template_src.exists():
+            shutil.copy(template_src, standards_dst)
+            if tracker:
+                tracker.complete("standards-file", f"copied to {agent_folder}")
+            if verbose:
+                console.print(f"[cyan]Copied speckit standards to {agent_folder}/speckit-standards.md[/cyan]")
+        else:
+            if tracker:
+                tracker.error("standards-file", "template not found")
+            if verbose:
+                console.print("[yellow]Warning:[/yellow] speckit-standards-template.md not found in templates")
+
+    except Exception as e:
+        if tracker:
+            tracker.error("standards-file", str(e))
+        raise
+
+
 @app.command()
 def init(
     project_name: str = typer.Argument(None, help="Name for your new project directory (optional if using --here, or use '.' for current directory)"),
@@ -954,10 +1207,11 @@ def init(
     skip_tls: bool = typer.Option(False, "--skip-tls", help="Skip SSL/TLS verification (not recommended)"),
     debug: bool = typer.Option(False, "--debug", help="Show verbose diagnostic output for network and extraction failures"),
     github_token: str = typer.Option(None, "--github-token", help="GitHub token to use for API requests (or set GH_TOKEN or GITHUB_TOKEN environment variable)"),
+    worktree: bool = typer.Option(False, "--worktree", help="Enable worktree mode for parallel feature development"),
 ):
     """
     Initialize a new Specify project from the latest template.
-    
+
     This command will:
     1. Check that required tools are installed (git is optional)
     2. Let you choose your AI assistant
@@ -965,7 +1219,8 @@ def init(
     4. Extract the template to a new project directory or current directory
     5. Initialize a fresh git repository (if not --no-git and no existing repo)
     6. Optionally set up AI assistant commands
-    
+    7. Optionally configure worktree mode for parallel feature development
+
     Examples:
         specify init my-project
         specify init my-project --ai claude
@@ -977,7 +1232,8 @@ def init(
         specify init --here --ai codex
         specify init --here --ai codebuddy
         specify init --here
-        specify init --here --force  # Skip confirmation when current directory not empty
+        specify init --here --force        # Skip confirmation when current directory not empty
+        specify init my-project --worktree # Initialize with worktree mode for parallel development
     """
 
     show_banner()
@@ -1143,6 +1399,17 @@ def init(
                     tracker.skip("git", "git not available")
             else:
                 tracker.skip("git", "--no-git flag")
+
+            # Configure worktree mode if requested
+            if worktree:
+                tracker.start("worktree")
+                try:
+                    configure_worktree_mode(project_path, selected_ai, verbose=False, tracker=tracker)
+                    tracker.complete("worktree", "configured")
+                except Exception as e:
+                    tracker.error("worktree", str(e))
+                    console.print(Panel(f"Worktree mode configuration failed: {e}", title="Warning", border_style="yellow"))
+                    # Don't fail the entire init if worktree setup fails
 
             tracker.complete("final", "project ready")
         except Exception as e:
@@ -1366,4 +1633,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

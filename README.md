@@ -91,15 +91,18 @@ specify-worktree check
 
 现在 `specify-worktree` 命令已经在系统中可用，可以在任何目录使用。
 
-### 第 2 步：初始化项目（启用 Worktree）
+### 第 2 步：初始化项目
 
 ```bash
-# 创建新项目
-specify-worktree init my-project --worktree --ai claude
+# 创建新项目（默认启用 worktree 模式）
+specify-worktree init my-project --ai claude
 
-# 或在现有项目中启用
-cd my-project
-specify-worktree init . --worktree --ai claude
+# 如果需要传统模式（不使用 worktree）
+specify-worktree init my-project --no-worktree --ai claude
+
+# 在当前目录初始化
+specify-worktree init . --ai claude
+specify-worktree init . --no-worktree --ai claude  # 传统模式
 ```
 
 ### 第 3 步：启动 AI 助手
@@ -168,11 +171,12 @@ cd my-project
 ### CLI 命令
 
 ```bash
-# 初始化项目（启用 worktree）
-specify-worktree init <project-name> --worktree --ai claude
+# 初始化项目（默认启用 worktree）
+specify-worktree init <project-name> --ai claude
+specify-worktree init <project-name> --no-worktree  # 传统模式
 
 # 在当前目录初始化
-specify-worktree init . --worktree
+specify-worktree init . --ai claude
 
 # 检查工具
 specify-worktree check

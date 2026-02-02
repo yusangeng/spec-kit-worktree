@@ -1207,7 +1207,8 @@ def init(
     skip_tls: bool = typer.Option(False, "--skip-tls", help="Skip SSL/TLS verification (not recommended)"),
     debug: bool = typer.Option(False, "--debug", help="Show verbose diagnostic output for network and extraction failures"),
     github_token: str = typer.Option(None, "--github-token", help="GitHub token to use for API requests (or set GH_TOKEN or GITHUB_TOKEN environment variable)"),
-    worktree: bool = typer.Option(False, "--worktree", help="Enable worktree mode for parallel feature development"),
+    worktree: bool = typer.Option(True, "--worktree", hidden=True),
+    no_worktree: bool = typer.Option(False, "--no-worktree", help="Disable worktree mode for traditional project setup"),
 ):
     """
     Initialize a new Specify project from the latest template.
@@ -1222,18 +1223,12 @@ def init(
     7. Optionally configure worktree mode for parallel feature development
 
     Examples:
-        specify init my-project
-        specify init my-project --ai claude
-        specify init my-project --ai copilot --no-git
-        specify init --ignore-agent-tools my-project
-        specify init . --ai claude         # Initialize in current directory
-        specify init .                     # Initialize in current directory (interactive AI selection)
-        specify init --here --ai claude    # Alternative syntax for current directory
-        specify init --here --ai codex
-        specify init --here --ai codebuddy
-        specify init --here
-        specify init --here --force        # Skip confirmation when current directory not empty
-        specify init my-project --worktree # Initialize with worktree mode for parallel development
+        specify-worktree init my-project                      # Create worktree project (default)
+        specify-worktree init my-project --ai claude          # Create worktree project with Claude
+        specify-worktree init my-project --no-worktree        # Create traditional project (no worktree)
+        specify-worktree init my-project --ai copilot --no-git --no-worktree  # Traditional, no git
+        specify-worktree init . --ai claude                   # Initialize in current directory (worktree mode)
+        specify-worktree init . --no-worktree --ai claude     # Traditional mode in current directory
     """
 
     show_banner()
@@ -1400,8 +1395,9 @@ def init(
             else:
                 tracker.skip("git", "--no-git flag")
 
-            # Configure worktree mode if requested
-            if worktree:
+            # Configure worktree mode if enabled (default: yes, unless --no-worktree flag)
+            worktree_enabled = worktree and not no_worktree
+            if worktree_enabled:
                 tracker.start("worktree")
                 try:
                     configure_worktree_mode(project_path, selected_ai, verbose=False, tracker=tracker)
@@ -1410,6 +1406,8 @@ def init(
                     tracker.error("worktree", str(e))
                     console.print(Panel(f"Worktree mode configuration failed: {e}", title="Warning", border_style="yellow"))
                     # Don't fail the entire init if worktree setup fails
+            else:
+                tracker.skip("worktree", "--no-worktree flag specified")
 
             tracker.complete("final", "project ready")
         except Exception as e:

@@ -19,9 +19,9 @@ Usage:
 
 Or install globally:
     uv tool install --from specify-cli.py specify-cli
-    specify init <project-name>
-    specify init .
-    specify init --here
+    specify-worktree init <project-name>
+    specify-worktree init .
+    specify-worktree init --here
 """
 
 import os
@@ -64,63 +64,6 @@ def _github_auth_headers(cli_token: str | None = None) -> dict:
     """Return Authorization header dict only when a non-empty token exists."""
     token = _github_token(cli_token)
     return {"Authorization": f"Bearer {token}"} if token else {}
-
-def _parse_rate_limit_headers(headers: httpx.Headers) -> dict:
-    """Extract and parse GitHub rate-limit headers."""
-    info = {}
-    
-    # Standard GitHub rate-limit headers
-    if "X-RateLimit-Limit" in headers:
-        info["limit"] = headers.get("X-RateLimit-Limit")
-    if "X-RateLimit-Remaining" in headers:
-        info["remaining"] = headers.get("X-RateLimit-Remaining")
-    if "X-RateLimit-Reset" in headers:
-        reset_epoch = int(headers.get("X-RateLimit-Reset", "0"))
-        if reset_epoch:
-            reset_time = datetime.fromtimestamp(reset_epoch, tz=timezone.utc)
-            info["reset_epoch"] = reset_epoch
-            info["reset_time"] = reset_time
-            info["reset_local"] = reset_time.astimezone()
-    
-    # Retry-After header (seconds or HTTP-date)
-    if "Retry-After" in headers:
-        retry_after = headers.get("Retry-After")
-        try:
-            info["retry_after_seconds"] = int(retry_after)
-        except ValueError:
-            # HTTP-date format - not implemented, just store as string
-            info["retry_after"] = retry_after
-    
-    return info
-
-def _format_rate_limit_error(status_code: int, headers: httpx.Headers, url: str) -> str:
-    """Format a user-friendly error message with rate-limit information."""
-    rate_info = _parse_rate_limit_headers(headers)
-    
-    lines = [f"GitHub API returned status {status_code} for {url}"]
-    lines.append("")
-    
-    if rate_info:
-        lines.append("[bold]Rate Limit Information:[/bold]")
-        if "limit" in rate_info:
-            lines.append(f"  • Rate Limit: {rate_info['limit']} requests/hour")
-        if "remaining" in rate_info:
-            lines.append(f"  • Remaining: {rate_info['remaining']}")
-        if "reset_local" in rate_info:
-            reset_str = rate_info["reset_local"].strftime("%Y-%m-%d %H:%M:%S %Z")
-            lines.append(f"  • Resets at: {reset_str}")
-        if "retry_after_seconds" in rate_info:
-            lines.append(f"  • Retry after: {rate_info['retry_after_seconds']} seconds")
-        lines.append("")
-    
-    # Add troubleshooting guidance
-    lines.append("[bold]Troubleshooting Tips:[/bold]")
-    lines.append("  • If you're on a shared CI or corporate environment, you may be rate-limited.")
-    lines.append("  • Consider using a GitHub token via --github-token or the GH_TOKEN/GITHUB_TOKEN")
-    lines.append("    environment variable to increase rate limits.")
-    lines.append("  • Authenticated requests have a limit of 5,000/hour vs 60/hour for unauthenticated.")
-    
-    return "\n".join(lines)
 
 # Agent configuration with name, folder, install URL, and CLI tool requirement
 AGENT_CONFIG = {
@@ -634,268 +577,151 @@ def merge_json_files(existing_path: Path, new_content: dict, verbose: bool = Fal
 
     return merged
 
-def download_template_from_github(ai_assistant: str, download_dir: Path, *, script_type: str = "sh", verbose: bool = True, show_progress: bool = True, client: httpx.Client = None, debug: bool = False, github_token: str = None) -> Tuple[Path, dict]:
-    repo_owner = "github"
-    repo_name = "spec-kit"
-    if client is None:
-        client = httpx.Client(verify=ssl_context)
 
-    if verbose:
-        console.print("[cyan]Fetching latest release information...[/cyan]")
-    api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
+def copy_template_files(project_path: Path, ai_assistant: str, script_type: str,
+                        worktree_enabled: bool = True,
+                        here: bool = False, verbose: bool = False,
+                        tracker: StepTracker = None) -> None:
+    """
+    Copy template files from local installation directory to target project.
 
-    try:
-        response = client.get(
-            api_url,
-            timeout=30,
-            follow_redirects=True,
-            headers=_github_auth_headers(github_token),
-        )
-        status = response.status_code
-        if status != 200:
-            # Format detailed error message with rate-limit info
-            error_msg = _format_rate_limit_error(status, response.headers, api_url)
-            if debug:
-                error_msg += f"\n\n[dim]Response body (truncated 500):[/dim]\n{response.text[:500]}"
-            raise RuntimeError(error_msg)
-        try:
-            release_data = response.json()
-        except ValueError as je:
-            raise RuntimeError(f"Failed to parse release JSON: {je}\nRaw (truncated 400): {response.text[:400]}")
-    except Exception as e:
-        console.print(f"[red]Error fetching release information[/red]")
-        console.print(Panel(str(e), title="Fetch Error", border_style="red"))
-        raise typer.Exit(1)
+    从项目根目录的 templates/ 和 scripts/ 复制文件到目标项目。
+    """
+    import shutil
 
-    assets = release_data.get("assets", [])
-    pattern = f"spec-kit-template-{ai_assistant}-{script_type}"
-    matching_assets = [
-        asset for asset in assets
-        if pattern in asset["name"] and asset["name"].endswith(".zip")
+    if tracker:
+        tracker.start("copy-templates")
+
+    # 1. 获取项目根目录
+    # __file__ = /path/to/src/specify_cli/__init__.py
+    # parent.parent.parent = /path/to/ (项目根目录)
+    project_root = Path(__file__).parent.parent.parent
+
+    templates_dir = project_root / "templates"
+    scripts_dir = project_root / "scripts"
+
+    # 验证目录存在
+    if not templates_dir.exists():
+        raise FileNotFoundError(f"Templates directory not found: {templates_dir}")
+    if not scripts_dir.exists():
+        raise FileNotFoundError(f"Scripts directory not found: {scripts_dir}")
+
+    # 2. 复制 AI 助手命令（根据 worktree 模式选择来源）
+    if tracker:
+        tracker.start("copy-commands")
+
+    commands_dst = project_path / ".claude" / "commands"
+    commands_dst.mkdir(parents=True, exist_ok=True)
+
+    if worktree_enabled:
+        # Worktree 模式：优先从 worktree-commands/ 复制，不足的从 commands/ 补充
+        worktree_commands_src = templates_dir / "worktree-commands"
+        commands_src = templates_dir / "commands"
+
+        worktree_files = {"implement.md", "plan.md", "specify.md", "tasks.md"}
+
+        for cmd_file in worktree_commands_src.glob("*.md"):
+            if cmd_file.name in worktree_files:
+                dst_file = commands_dst / f"speckit.{cmd_file.name}"
+                shutil.copy(cmd_file, dst_file)
+
+        # 补充 commands/ 中有但 worktree-commands/ 中没有的文件
+        for cmd_file in commands_src.glob("*.md"):
+            if cmd_file.name not in worktree_files:
+                dst_file = commands_dst / f"speckit.{cmd_file.name}"
+                shutil.copy(cmd_file, dst_file)
+    else:
+        # 传统模式：全部从 commands/ 复制
+        commands_src = templates_dir / "commands"
+        for cmd_file in commands_src.glob("*.md"):
+            dst_file = commands_dst / f"speckit.{cmd_file.name}"
+            shutil.copy(cmd_file, dst_file)
+
+    if tracker:
+        tracker.complete("copy-commands", f"{len(list(commands_dst.glob('*.md')))} files")
+
+    # 3. 复制所有 Shell 脚本
+    if tracker:
+        tracker.start("copy-scripts")
+
+    scripts_dst = project_path / ".specify" / "scripts" / "bash"
+    scripts_dst.mkdir(parents=True, exist_ok=True)
+
+    scripts_src = scripts_dir / "bash"
+    script_files = [
+        "check-prerequisites.sh",
+        "common.sh",
+        "create-new-feature.sh",
+        "create-worktree.sh",
+        "list-worktrees.sh",
+        "remove-worktree.sh",
+        "setup-plan.sh",
+        "update-agent-context.sh",
+        "worktree-common.sh",
     ]
 
-    asset = matching_assets[0] if matching_assets else None
-
-    if asset is None:
-        console.print(f"[red]No matching release asset found[/red] for [bold]{ai_assistant}[/bold] (expected pattern: [bold]{pattern}[/bold])")
-        asset_names = [a.get('name', '?') for a in assets]
-        console.print(Panel("\n".join(asset_names) or "(no assets)", title="Available Assets", border_style="yellow"))
-        raise typer.Exit(1)
-
-    download_url = asset["browser_download_url"]
-    filename = asset["name"]
-    file_size = asset["size"]
-
-    if verbose:
-        console.print(f"[cyan]Found template:[/cyan] {filename}")
-        console.print(f"[cyan]Size:[/cyan] {file_size:,} bytes")
-        console.print(f"[cyan]Release:[/cyan] {release_data['tag_name']}")
-
-    zip_path = download_dir / filename
-    if verbose:
-        console.print(f"[cyan]Downloading template...[/cyan]")
-
-    try:
-        with client.stream(
-            "GET",
-            download_url,
-            timeout=60,
-            follow_redirects=True,
-            headers=_github_auth_headers(github_token),
-        ) as response:
-            if response.status_code != 200:
-                # Handle rate-limiting on download as well
-                error_msg = _format_rate_limit_error(response.status_code, response.headers, download_url)
-                if debug:
-                    error_msg += f"\n\n[dim]Response body (truncated 400):[/dim]\n{response.text[:400]}"
-                raise RuntimeError(error_msg)
-            total_size = int(response.headers.get('content-length', 0))
-            with open(zip_path, 'wb') as f:
-                if total_size == 0:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        f.write(chunk)
-                else:
-                    if show_progress:
-                        with Progress(
-                            SpinnerColumn(),
-                            TextColumn("[progress.description]{task.description}"),
-                            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                            console=console,
-                        ) as progress:
-                            task = progress.add_task("Downloading...", total=total_size)
-                            downloaded = 0
-                            for chunk in response.iter_bytes(chunk_size=8192):
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                progress.update(task, completed=downloaded)
-                    else:
-                        for chunk in response.iter_bytes(chunk_size=8192):
-                            f.write(chunk)
-    except Exception as e:
-        console.print(f"[red]Error downloading template[/red]")
-        detail = str(e)
-        if zip_path.exists():
-            zip_path.unlink()
-        console.print(Panel(detail, title="Download Error", border_style="red"))
-        raise typer.Exit(1)
-    if verbose:
-        console.print(f"Downloaded: {filename}")
-    metadata = {
-        "filename": filename,
-        "size": file_size,
-        "release": release_data["tag_name"],
-        "asset_url": download_url
-    }
-    return zip_path, metadata
-
-def download_and_extract_template(project_path: Path, ai_assistant: str, script_type: str, is_current_dir: bool = False, *, verbose: bool = True, tracker: StepTracker | None = None, client: httpx.Client = None, debug: bool = False, github_token: str = None) -> Path:
-    """Download the latest release and extract it to create a new project.
-    Returns project_path. Uses tracker if provided (with keys: fetch, download, extract, cleanup)
-    """
-    current_dir = Path.cwd()
+    for script in script_files:
+        src_file = scripts_src / script
+        if src_file.exists():
+            shutil.copy(src_file, scripts_dst / script)
+            # 确保可执行权限
+            (scripts_dst / script).chmod(0o755)
 
     if tracker:
-        tracker.start("fetch", "contacting GitHub API")
-    try:
-        zip_path, meta = download_template_from_github(
-            ai_assistant,
-            current_dir,
-            script_type=script_type,
-            verbose=verbose and tracker is None,
-            show_progress=(tracker is None),
-            client=client,
-            debug=debug,
-            github_token=github_token
-        )
-        if tracker:
-            tracker.complete("fetch", f"release {meta['release']} ({meta['size']:,} bytes)")
-            tracker.add("download", "Download template")
-            tracker.complete("download", meta['filename'])
-    except Exception as e:
-        if tracker:
-            tracker.error("fetch", str(e))
-        else:
-            if verbose:
-                console.print(f"[red]Error downloading template:[/red] {e}")
-        raise
+        tracker.complete("copy-scripts", f"{len(script_files)} files")
+
+    # 4. 复制所有模板文件
+    if tracker:
+        tracker.start("copy-templates-files")
+
+    templates_dst = project_path / ".specify" / "templates"
+    templates_dst.mkdir(parents=True, exist_ok=True)
+
+    template_files = [
+        "spec-template.md",
+        "plan-template.md",
+        "tasks-template.md",
+        "checklist-template.md",
+        "agent-file-template.md",
+        "speckit-standards-template.md",
+    ]
+
+    for template in template_files:
+        src_file = templates_dir / template
+        if src_file.exists():
+            shutil.copy(src_file, templates_dst / template)
 
     if tracker:
-        tracker.add("extract", "Extract template")
-        tracker.start("extract")
-    elif verbose:
-        console.print("Extracting template...")
+        tracker.complete("copy-templates-files", f"{len(template_files)} files")
 
-    try:
-        if not is_current_dir:
-            project_path.mkdir(parents=True)
+    # 5. 复制 constitution 模板（直接从项目根目录的 memory/ 读取）
+    if tracker:
+        tracker.start("copy-constitution")
 
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_contents = zip_ref.namelist()
-            if tracker:
-                tracker.start("zip-list")
-                tracker.complete("zip-list", f"{len(zip_contents)} entries")
-            elif verbose:
-                console.print(f"[cyan]ZIP contains {len(zip_contents)} items[/cyan]")
+    memory_dst = project_path / ".specify" / "memory"
+    memory_dst.mkdir(parents=True, exist_ok=True)
 
-            if is_current_dir:
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    temp_path = Path(temp_dir)
-                    zip_ref.extractall(temp_path)
+    # 直接从项目根目录的 memory/ 读取
+    constitution_src = project_root / "memory" / "constitution.md"
+    if not constitution_src.exists():
+        raise FileNotFoundError(f"Constitution template not found: {constitution_src}")
 
-                    extracted_items = list(temp_path.iterdir())
-                    if tracker:
-                        tracker.start("extracted-summary")
-                        tracker.complete("extracted-summary", f"temp {len(extracted_items)} items")
-                    elif verbose:
-                        console.print(f"[cyan]Extracted {len(extracted_items)} items to temp location[/cyan]")
+    shutil.copy(constitution_src, memory_dst / "constitution.md")
 
-                    source_dir = temp_path
-                    if len(extracted_items) == 1 and extracted_items[0].is_dir():
-                        source_dir = extracted_items[0]
-                        if tracker:
-                            tracker.add("flatten", "Flatten nested directory")
-                            tracker.complete("flatten")
-                        elif verbose:
-                            console.print(f"[cyan]Found nested directory structure[/cyan]")
+    if tracker:
+        tracker.complete("copy-constitution", "copied")
 
-                    for item in source_dir.iterdir():
-                        dest_path = project_path / item.name
-                        if item.is_dir():
-                            if dest_path.exists():
-                                if verbose and not tracker:
-                                    console.print(f"[yellow]Merging directory:[/yellow] {item.name}")
-                                for sub_item in item.rglob('*'):
-                                    if sub_item.is_file():
-                                        rel_path = sub_item.relative_to(item)
-                                        dest_file = dest_path / rel_path
-                                        dest_file.parent.mkdir(parents=True, exist_ok=True)
-                                        # Special handling for .vscode/settings.json - merge instead of overwrite
-                                        if dest_file.name == "settings.json" and dest_file.parent.name == ".vscode":
-                                            handle_vscode_settings(sub_item, dest_file, rel_path, verbose, tracker)
-                                        else:
-                                            shutil.copy2(sub_item, dest_file)
-                            else:
-                                shutil.copytree(item, dest_path)
-                        else:
-                            if dest_path.exists() and verbose and not tracker:
-                                console.print(f"[yellow]Overwriting file:[/yellow] {item.name}")
-                            shutil.copy2(item, dest_path)
-                    if verbose and not tracker:
-                        console.print(f"[cyan]Template files merged into current directory[/cyan]")
-            else:
-                zip_ref.extractall(project_path)
+    # 6. 复制 VSCode 配置（如果存在）
+    vscode_src = templates_dir / "vscode-settings.json"
+    if vscode_src.exists():
+        vscode_dst = project_path / ".vscode"
+        vscode_dst.mkdir(exist_ok=True)
+        settings_file = vscode_dst / "settings.json"
+        if not settings_file.exists():
+            shutil.copy(vscode_src, settings_file)
 
-                extracted_items = list(project_path.iterdir())
-                if tracker:
-                    tracker.start("extracted-summary")
-                    tracker.complete("extracted-summary", f"{len(extracted_items)} top-level items")
-                elif verbose:
-                    console.print(f"[cyan]Extracted {len(extracted_items)} items to {project_path}:[/cyan]")
-                    for item in extracted_items:
-                        console.print(f"  - {item.name} ({'dir' if item.is_dir() else 'file'})")
-
-                if len(extracted_items) == 1 and extracted_items[0].is_dir():
-                    nested_dir = extracted_items[0]
-                    temp_move_dir = project_path.parent / f"{project_path.name}_temp"
-
-                    shutil.move(str(nested_dir), str(temp_move_dir))
-
-                    project_path.rmdir()
-
-                    shutil.move(str(temp_move_dir), str(project_path))
-                    if tracker:
-                        tracker.add("flatten", "Flatten nested directory")
-                        tracker.complete("flatten")
-                    elif verbose:
-                        console.print(f"[cyan]Flattened nested directory structure[/cyan]")
-
-    except Exception as e:
-        if tracker:
-            tracker.error("extract", str(e))
-        else:
-            if verbose:
-                console.print(f"[red]Error extracting template:[/red] {e}")
-                if debug:
-                    console.print(Panel(str(e), title="Extraction Error", border_style="red"))
-
-        if not is_current_dir and project_path.exists():
-            shutil.rmtree(project_path)
-        raise typer.Exit(1)
-    else:
-        if tracker:
-            tracker.complete("extract")
-    finally:
-        if tracker:
-            tracker.add("cleanup", "Remove temporary archive")
-
-        if zip_path.exists():
-            zip_path.unlink()
-            if tracker:
-                tracker.complete("cleanup")
-            elif verbose:
-                console.print(f"Cleaned up: {zip_path.name}")
-
-    return project_path
+    if tracker:
+        tracker.complete("copy-templates", "all files copied")
 
 
 def ensure_executable_scripts(project_path: Path, tracker: StepTracker | None = None) -> None:
@@ -1204,23 +1030,19 @@ def init(
     no_git: bool = typer.Option(False, "--no-git", help="Skip git repository initialization"),
     here: bool = typer.Option(False, "--here", help="Initialize project in the current directory instead of creating a new one"),
     force: bool = typer.Option(False, "--force", help="Force merge/overwrite when using --here (skip confirmation)"),
-    skip_tls: bool = typer.Option(False, "--skip-tls", help="Skip SSL/TLS verification (not recommended)"),
-    debug: bool = typer.Option(False, "--debug", help="Show verbose diagnostic output for network and extraction failures"),
-    github_token: str = typer.Option(None, "--github-token", help="GitHub token to use for API requests (or set GH_TOKEN or GITHUB_TOKEN environment variable)"),
     worktree: bool = typer.Option(True, "--worktree", hidden=True),
     no_worktree: bool = typer.Option(False, "--no-worktree", help="Disable worktree mode for traditional project setup"),
 ):
     """
-    Initialize a new Specify project from the latest template.
+    Initialize a new Specify project from local templates.
 
     This command will:
     1. Check that required tools are installed (git is optional)
     2. Let you choose your AI assistant
-    3. Download the appropriate template from GitHub
-    4. Extract the template to a new project directory or current directory
-    5. Initialize a fresh git repository (if not --no-git and no existing repo)
-    6. Optionally set up AI assistant commands
-    7. Optionally configure worktree mode for parallel feature development
+    3. Copy template files from the local installation
+    4. Initialize a fresh git repository (if not --no-git and no existing repo)
+    5. Optionally set up AI assistant commands
+    6. Optionally configure worktree mode for parallel feature development
 
     Examples:
         specify-worktree init my-project                      # Create worktree project (default)
@@ -1353,13 +1175,12 @@ def init(
     tracker.add("script-select", "Select script type")
     tracker.complete("script-select", selected_script)
     for key, label in [
-        ("fetch", "Fetch latest release"),
-        ("download", "Download template"),
-        ("extract", "Extract template"),
-        ("zip-list", "Archive contents"),
-        ("extracted-summary", "Extraction summary"),
+        ("copy-templates", "Copy template files"),
+        ("copy-commands", "Copy AI assistant commands"),
+        ("copy-scripts", "Copy shell scripts"),
+        ("copy-templates-files", "Copy template files"),
+        ("copy-constitution", "Copy constitution"),
         ("chmod", "Ensure scripts executable"),
-        ("cleanup", "Cleanup"),
         ("git", "Initialize git repository"),
         ("final", "Finalize")
     ]:
@@ -1371,11 +1192,16 @@ def init(
     with Live(tracker.render(), console=console, refresh_per_second=8, transient=True) as live:
         tracker.attach_refresh(lambda: live.update(tracker.render()))
         try:
-            verify = not skip_tls
-            local_ssl_context = ssl_context if verify else False
-            local_client = httpx.Client(verify=local_ssl_context)
+            # Determine worktree mode before copying templates
+            worktree_enabled = worktree and not no_worktree
 
-            download_and_extract_template(project_path, selected_ai, selected_script, here, verbose=False, tracker=tracker, client=local_client, debug=debug, github_token=github_token)
+            copy_template_files(
+                project_path, selected_ai, selected_script,
+                worktree_enabled=worktree_enabled,
+                here=here,
+                verbose=False,
+                tracker=tracker
+            )
 
             ensure_executable_scripts(project_path, tracker=tracker)
 
@@ -1396,7 +1222,6 @@ def init(
                 tracker.skip("git", "--no-git flag")
 
             # Configure worktree mode if enabled (default: yes, unless --no-worktree flag)
-            worktree_enabled = worktree and not no_worktree
             if worktree_enabled:
                 tracker.start("worktree")
                 try:
@@ -1413,15 +1238,6 @@ def init(
         except Exception as e:
             tracker.error("final", str(e))
             console.print(Panel(f"Initialization failed: {e}", title="Failure", border_style="red"))
-            if debug:
-                _env_pairs = [
-                    ("Python", sys.version.split()[0]),
-                    ("Platform", sys.platform),
-                    ("CWD", str(Path.cwd())),
-                ]
-                _label_width = max(len(k) for k, _ in _env_pairs)
-                env_lines = [f"{k.ljust(_label_width)} → [bright_black]{v}[/bright_black]" for k, v in _env_pairs]
-                console.print(Panel("\n".join(env_lines), title="Debug Environment", border_style="magenta"))
             if not here and project_path.exists():
                 shutil.rmtree(project_path)
             raise typer.Exit(1)
@@ -1552,9 +1368,9 @@ def version():
     """Display version and system information."""
     import platform
     import importlib.metadata
-    
+
     show_banner()
-    
+
     # Get CLI version from package metadata
     cli_version = "unknown"
     try:
@@ -1570,46 +1386,12 @@ def version():
                     cli_version = data.get("project", {}).get("version", "unknown")
         except Exception:
             pass
-    
-    # Fetch latest template release version
-    repo_owner = "github"
-    repo_name = "spec-kit"
-    api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
-    
-    template_version = "unknown"
-    release_date = "unknown"
-    
-    try:
-        response = client.get(
-            api_url,
-            timeout=10,
-            follow_redirects=True,
-            headers=_github_auth_headers(),
-        )
-        if response.status_code == 200:
-            release_data = response.json()
-            template_version = release_data.get("tag_name", "unknown")
-            # Remove 'v' prefix if present
-            if template_version.startswith("v"):
-                template_version = template_version[1:]
-            release_date = release_data.get("published_at", "unknown")
-            if release_date != "unknown":
-                # Format the date nicely
-                try:
-                    dt = datetime.fromisoformat(release_date.replace('Z', '+00:00'))
-                    release_date = dt.strftime("%Y-%m-%d")
-                except Exception:
-                    pass
-    except Exception:
-        pass
 
     info_table = Table(show_header=False, box=None, padding=(0, 2))
     info_table.add_column("Key", style="cyan", justify="right")
     info_table.add_column("Value", style="white")
 
     info_table.add_row("CLI Version", cli_version)
-    info_table.add_row("Template Version", template_version)
-    info_table.add_row("Released", release_date)
     info_table.add_row("", "")
     info_table.add_row("Python", platform.python_version())
     info_table.add_row("Platform", platform.system())

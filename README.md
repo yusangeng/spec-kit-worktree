@@ -191,23 +191,6 @@ specify-worktree check
 
 ---
 
-## 🔄 从传统模式迁移
-
-如果你有使用 `--no-worktree` 初始化的现有项目：
-
-1. **现有项目仍然可用** - 不会影响现有功能
-2. **采用 worktree 模式以获得更好的特性隔离**：
-   ```bash
-   # 重新初始化以更新模板
-   specify init . --ai claude --force
-   ```
-3. **现有特性分支将继续工作**
-4. **新特性将自动使用 worktree 模式**
-
-**注意**：从 v0.0.25 开始，不再支持传统模式（`--no-worktree`）
-
----
-
 ## 📄 许可证
 
 MIT License - 与官方 Spec Kit 相同

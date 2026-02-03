@@ -44,12 +44,15 @@ if (Test-Path $template) {
 
 # Output results
 if ($Json) {
-    $result = [PSCustomObject]@{ 
+    $result = [PSCustomObject]@{
         FEATURE_SPEC = $paths.FEATURE_SPEC
         IMPL_PLAN = $paths.IMPL_PLAN
         SPECS_DIR = $paths.FEATURE_DIR
         BRANCH = $paths.CURRENT_BRANCH
         HAS_GIT = $paths.HAS_GIT
+        IN_WORKTREE = $paths.IN_WORKTREE
+        REPO_ROOT = $paths.REPO_ROOT
+        EFFECTIVE_ROOT = $paths.EFFECTIVE_ROOT
     }
     $result | ConvertTo-Json -Compress
 } else {
@@ -58,4 +61,9 @@ if ($Json) {
     Write-Output "SPECS_DIR: $($paths.FEATURE_DIR)"
     Write-Output "BRANCH: $($paths.CURRENT_BRANCH)"
     Write-Output "HAS_GIT: $($paths.HAS_GIT)"
+    if ($paths.IN_WORKTREE) {
+        Write-Output "IN_WORKTREE: true"
+        Write-Output "REPO_ROOT: $($paths.REPO_ROOT)"
+        Write-Output "EFFECTIVE_ROOT: $($paths.EFFECTIVE_ROOT)"
+    }
 }

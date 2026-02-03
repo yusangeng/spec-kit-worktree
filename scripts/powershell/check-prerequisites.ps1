@@ -67,15 +67,20 @@ if (-not (Test-FeatureBranch -Branch $paths.CURRENT_BRANCH -HasGit:$paths.HAS_GI
 if ($PathsOnly) {
     if ($Json) {
         [PSCustomObject]@{
-            REPO_ROOT    = $paths.REPO_ROOT
-            BRANCH       = $paths.CURRENT_BRANCH
-            FEATURE_DIR  = $paths.FEATURE_DIR
-            FEATURE_SPEC = $paths.FEATURE_SPEC
-            IMPL_PLAN    = $paths.IMPL_PLAN
-            TASKS        = $paths.TASKS
+            REPO_ROOT     = $paths.REPO_ROOT
+            EFFECTIVE_ROOT = $paths.EFFECTIVE_ROOT
+            BRANCH        = $paths.CURRENT_BRANCH
+            FEATURE_DIR   = $paths.FEATURE_DIR
+            FEATURE_SPEC  = $paths.FEATURE_SPEC
+            IMPL_PLAN     = $paths.IMPL_PLAN
+            TASKS         = $paths.TASKS
+            IN_WORKTREE   = $paths.IN_WORKTREE
         } | ConvertTo-Json -Compress
     } else {
         Write-Output "REPO_ROOT: $($paths.REPO_ROOT)"
+        if ($paths.IN_WORKTREE) {
+            Write-Output "EFFECTIVE_ROOT: $($paths.EFFECTIVE_ROOT) (worktree mode)"
+        }
         Write-Output "BRANCH: $($paths.CURRENT_BRANCH)"
         Write-Output "FEATURE_DIR: $($paths.FEATURE_DIR)"
         Write-Output "FEATURE_SPEC: $($paths.FEATURE_SPEC)"

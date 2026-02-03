@@ -37,11 +37,20 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Acquire environment paths
 $envData = Get-FeaturePathsEnv
-$REPO_ROOT     = $envData.REPO_ROOT
+$REPO_ROOT      = $envData.REPO_ROOT
+$EFFECTIVE_ROOT = $envData.EFFECTIVE_ROOT
+$IN_WORKTREE    = $envData.IN_WORKTREE
 $CURRENT_BRANCH = $envData.CURRENT_BRANCH
-$HAS_GIT       = $envData.HAS_GIT
-$IMPL_PLAN     = $envData.IMPL_PLAN
+$HAS_GIT        = $envData.HAS_GIT
+$IMPL_PLAN      = $envData.IMPL_PLAN
 $NEW_PLAN = $IMPL_PLAN
+
+# Log worktree mode if detected
+if ($IN_WORKTREE) {
+    Write-Info "Worktree mode detected"
+    Write-Info "  Main repository root: $REPO_ROOT"
+    Write-Info "  Worktree root: $EFFECTIVE_ROOT"
+}
 
 # Agent file paths
 $CLAUDE_FILE   = Join-Path $REPO_ROOT 'CLAUDE.md'

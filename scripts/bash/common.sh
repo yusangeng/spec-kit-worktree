@@ -62,6 +62,38 @@ has_git() {
     git rev-parse --show-toplevel >/dev/null 2>&1
 }
 
+# Check if we're in a git worktree (vs main repository)
+# Returns: 0 if in worktree, 1 if in main repo or not in git
+is_in_worktree() {
+    local git_common_dir
+    git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
+
+    # In worktrees, the git common dir is different from the current directory's .git
+    # In main repo, they are the same
+    local current_git_dir
+    current_git_dir=$(git rev-parse --git-dir 2>/dev/null) || return 1
+
+    # If the git dir is different from git-common-dir, we're in a worktree
+    [[ "$git_common_dir" != "$current_git_dir" ]]
+}
+
+# Get the effective root directory for finding spec files
+# In worktree: returns the worktree directory (where specs are)
+# In main repo: returns the main repository root
+get_effective_root() {
+    if is_in_worktree; then
+        # In worktree - specs are in the worktree directory
+        pwd
+    elif git rev-parse --show-toplevel >/dev/null 2>&1; then
+        # In main repo - specs are in repo root
+        git rev-parse --show-toplevel
+    else
+        # Non-git repo - fall back to script location
+        local script_dir="$(CDPATH="" cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        (cd "$script_dir/../../.." && pwd)
+    fi
+}
+
 check_feature_branch() {
     local branch="$1"
     local has_git_repo="$2"
@@ -125,21 +157,47 @@ find_feature_dir_by_prefix() {
 }
 
 get_feature_paths() {
-    local repo_root=$(get_repo_root)
+    local effective_root=$(get_effective_root)
+    local main_repo_root=""
     local current_branch=$(get_current_branch)
     local has_git_repo="false"
+    local in_worktree="false"
 
     if has_git; then
         has_git_repo="true"
+        # Get the actual main repository root (not worktree)
+        main_repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+        if is_in_worktree; then
+            # In worktree, show-toplevel returns the worktree path
+            # We need to get the common git dir's parent to find the main repo
+            local git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+            if [[ -n "$git_common_dir" ]]; then
+                # The git-common-dir is typically at /path/to/repo/.git/worktrees/<worktree-name>
+                # or /path/to/repo/.git for main repo
+                main_repo_root=$(dirname "$git_common_dir")
+                # Handle both .git/worktrees/<name> and .git cases
+                if [[ "$(basename "$main_repo_root")" == "worktrees" ]]; then
+                    main_repo_root=$(dirname "$(dirname "$main_repo_root")")
+                fi
+            fi
+        fi
+    else
+        main_repo_root="$effective_root"
     fi
 
-    # Use prefix-based lookup to support multiple branches per spec
-    local feature_dir=$(find_feature_dir_by_prefix "$repo_root" "$current_branch")
+    if is_in_worktree; then
+        in_worktree="true"
+    fi
+
+    # Use effective root for feature path lookup
+    local feature_dir=$(find_feature_dir_by_prefix "$effective_root" "$current_branch")
 
     cat <<EOF
-REPO_ROOT='$repo_root'
+REPO_ROOT='$main_repo_root'
+EFFECTIVE_ROOT='$effective_root'
 CURRENT_BRANCH='$current_branch'
 HAS_GIT='$has_git_repo'
+IN_WORKTREE='$in_worktree'
 FEATURE_DIR='$feature_dir'
 FEATURE_SPEC='$feature_dir/spec.md'
 IMPL_PLAN='$feature_dir/plan.md'

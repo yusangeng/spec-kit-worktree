@@ -25,7 +25,12 @@ Note: This clarification workflow is expected to run (and be completed) BEFORE i
 
 Execution steps:
 
-1. Run `{SCRIPT}` from repo root **once** (combined `--json --paths-only` mode / `-Json -PathsOnly`). Parse minimal JSON payload fields:
+1. Run `{SCRIPT}` from the current working directory **once** (combined `--json --paths-only` mode / `-Json -PathsOnly`).
+   - The script automatically detects if you're in a worktree or main repo
+   - All paths returned are absolute paths to the correct location
+   - **IMPORTANT**: Do NOT change directory - stay in the current working directory
+
+   Parse minimal JSON payload fields:
    - `FEATURE_DIR`
    - `FEATURE_SPEC`
    - (Optionally capture `IMPL_PLAN`, `TASKS` for future chained flows.)

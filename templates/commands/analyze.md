@@ -27,7 +27,12 @@ Identify inconsistencies, duplications, ambiguities, and underspecified items ac
 
 ### 1. Initialize Analysis Context
 
-Run `{SCRIPT}` once from repo root and parse JSON for FEATURE_DIR and AVAILABLE_DOCS. Derive absolute paths:
+Run `{SCRIPT}` from the current working directory and parse JSON for FEATURE_DIR and AVAILABLE_DOCS.
+- The script automatically detects if you're in a worktree or main repo
+- All paths returned are absolute paths to the correct location
+- **IMPORTANT**: Do NOT change directory - stay in the current working directory
+
+Derive absolute paths:
 
 - SPEC = FEATURE_DIR/spec.md
 - PLAN = FEATURE_DIR/plan.md

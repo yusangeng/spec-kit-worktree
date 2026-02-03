@@ -55,6 +55,14 @@ source "$SCRIPT_DIR/common.sh"
 # Get all paths and variables from common functions
 eval $(get_feature_paths)
 
+# Add worktree mode logging
+if [[ "$IN_WORKTREE" == "true" ]]; then
+    log_info "Working in worktree mode"
+    log_info "  Worktree directory: $EFFECTIVE_ROOT"
+    log_info "  Main repository: $REPO_ROOT"
+    log_info "  Spec files: $FEATURE_DIR"
+fi
+
 NEW_PLAN="$IMPL_PLAN"  # Alias for compatibility with existing code
 AGENT_TYPE="${1:-}"
 
@@ -131,17 +139,25 @@ validate_environment() {
         fi
         exit 1
     fi
-    
-    # Check if plan.md exists
+
+    # Check if plan.md exists with worktree-aware error message
     if [[ ! -f "$NEW_PLAN" ]]; then
         log_error "No plan.md found at $NEW_PLAN"
-        log_info "Make sure you're working on a feature with a corresponding spec directory"
+        if [[ "$IN_WORKTREE" == "true" ]]; then
+            log_info "You are working in a worktree. Make sure plan.md exists at:"
+            log_info "  $NEW_PLAN"
+            log_info ""
+            log_info "Current worktree: $EFFECTIVE_ROOT"
+            log_info "Expected location: $EFFECTIVE_ROOT/specs/<feature-name>/plan.md"
+        else
+            log_info "Make sure you're working on a feature with a corresponding spec directory"
+        fi
         if [[ "$HAS_GIT" != "true" ]]; then
             log_info "Use: export SPECIFY_FEATURE=your-feature-name or create a new feature first"
         fi
         exit 1
     fi
-    
+
     # Check if template exists (needed for new files)
     if [[ ! -f "$TEMPLATE_FILE" ]]; then
         log_warning "Template file not found at $TEMPLATE_FILE"

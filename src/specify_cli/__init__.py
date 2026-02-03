@@ -579,7 +579,6 @@ def merge_json_files(existing_path: Path, new_content: dict, verbose: bool = Fal
 
 
 def copy_template_files(project_path: Path, ai_assistant: str, script_type: str,
-                        worktree_enabled: bool = True,
                         here: bool = False, verbose: bool = False,
                         tracker: StepTracker = None) -> None:
     """
@@ -613,29 +612,11 @@ def copy_template_files(project_path: Path, ai_assistant: str, script_type: str,
     commands_dst = project_path / ".claude" / "commands"
     commands_dst.mkdir(parents=True, exist_ok=True)
 
-    if worktree_enabled:
-        # Worktree 模式：优先从 worktree-commands/ 复制，不足的从 commands/ 补充
-        worktree_commands_src = templates_dir / "worktree-commands"
-        commands_src = templates_dir / "commands"
-
-        worktree_files = {"implement.md", "plan.md", "specify.md", "tasks.md"}
-
-        for cmd_file in worktree_commands_src.glob("*.md"):
-            if cmd_file.name in worktree_files:
-                dst_file = commands_dst / f"speckit.{cmd_file.name}"
-                shutil.copy(cmd_file, dst_file)
-
-        # 补充 commands/ 中有但 worktree-commands/ 中没有的文件
-        for cmd_file in commands_src.glob("*.md"):
-            if cmd_file.name not in worktree_files:
-                dst_file = commands_dst / f"speckit.{cmd_file.name}"
-                shutil.copy(cmd_file, dst_file)
-    else:
-        # 传统模式：全部从 commands/ 复制
-        commands_src = templates_dir / "commands"
-        for cmd_file in commands_src.glob("*.md"):
-            dst_file = commands_dst / f"speckit.{cmd_file.name}"
-            shutil.copy(cmd_file, dst_file)
+    # Always copy from commands/ (worktree-specific files already merged in)
+    commands_src = templates_dir / "commands"
+    for cmd_file in commands_src.glob("*.md"):
+        dst_file = commands_dst / f"speckit.{cmd_file.name}"
+        shutil.copy(cmd_file, dst_file)
 
     if tracker:
         tracker.complete("copy-commands", f"{len(list(commands_dst.glob('*.md')))} files")
@@ -1030,8 +1011,6 @@ def init(
     no_git: bool = typer.Option(False, "--no-git", help="Skip git repository initialization"),
     here: bool = typer.Option(False, "--here", help="Initialize project in the current directory instead of creating a new one"),
     force: bool = typer.Option(False, "--force", help="Force merge/overwrite when using --here (skip confirmation)"),
-    worktree: bool = typer.Option(True, "--worktree", hidden=True),
-    no_worktree: bool = typer.Option(False, "--no-worktree", help="Disable worktree mode for traditional project setup"),
 ):
     """
     Initialize a new Specify project from local templates.
@@ -1042,15 +1021,13 @@ def init(
     3. Copy template files from the local installation
     4. Initialize a fresh git repository (if not --no-git and no existing repo)
     5. Optionally set up AI assistant commands
-    6. Optionally configure worktree mode for parallel feature development
+    6. Configure worktree mode for parallel feature development
 
     Examples:
-        specify-worktree init my-project                      # Create worktree project (default)
-        specify-worktree init my-project --ai claude          # Create worktree project with Claude
-        specify-worktree init my-project --no-worktree        # Create traditional project (no worktree)
-        specify-worktree init my-project --ai copilot --no-git --no-worktree  # Traditional, no git
-        specify-worktree init . --ai claude                   # Initialize in current directory (worktree mode)
-        specify-worktree init . --no-worktree --ai claude     # Traditional mode in current directory
+        specify-worktree init my-project                      # Create new project
+        specify-worktree init my-project --ai claude          # Create project with Claude
+        specify-worktree init my-project --ai copilot --no-git  # Create project without git
+        specify-worktree init . --ai claude                   # Initialize in current directory
     """
 
     show_banner()
@@ -1192,12 +1169,8 @@ def init(
     with Live(tracker.render(), console=console, refresh_per_second=8, transient=True) as live:
         tracker.attach_refresh(lambda: live.update(tracker.render()))
         try:
-            # Determine worktree mode before copying templates
-            worktree_enabled = worktree and not no_worktree
-
             copy_template_files(
                 project_path, selected_ai, selected_script,
-                worktree_enabled=worktree_enabled,
                 here=here,
                 verbose=False,
                 tracker=tracker
@@ -1221,18 +1194,15 @@ def init(
             else:
                 tracker.skip("git", "--no-git flag")
 
-            # Configure worktree mode if enabled (default: yes, unless --no-worktree flag)
-            if worktree_enabled:
-                tracker.start("worktree")
-                try:
-                    configure_worktree_mode(project_path, selected_ai, verbose=False, tracker=tracker)
-                    tracker.complete("worktree", "configured")
-                except Exception as e:
-                    tracker.error("worktree", str(e))
-                    console.print(Panel(f"Worktree mode configuration failed: {e}", title="Warning", border_style="yellow"))
-                    # Don't fail the entire init if worktree setup fails
-            else:
-                tracker.skip("worktree", "--no-worktree flag specified")
+            # Configure worktree mode (always enabled)
+            tracker.start("worktree")
+            try:
+                configure_worktree_mode(project_path, selected_ai, verbose=False, tracker=tracker)
+                tracker.complete("worktree", "configured")
+            except Exception as e:
+                tracker.error("worktree", str(e))
+                console.print(Panel(f"Worktree mode configuration failed: {e}", title="Warning", border_style="yellow"))
+                # Don't fail the entire init if worktree setup fails
 
             tracker.complete("final", "project ready")
         except Exception as e:

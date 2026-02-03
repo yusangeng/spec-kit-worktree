@@ -11,7 +11,7 @@
 
 ## 📖 什么是 Spec Kit Worktree？
 
-**Spec Kit Worktree** 是 [github/spec-kit](https://github.com/github/spec-kit) 的特化版本，新增了 **Git Worktree 支持**。
+**Spec Kit Worktree** 是 [github/spec-kit](https://github.com/github/spec-kit) 的特化版本，内置 **Git Worktree 支持**。
 
 ### 核心功能：并行开发多个特性
 
@@ -40,9 +40,9 @@ Spec Kit 是一个**规范驱动开发（Spec-Driven Development）**工具包�
 
 ---
 
-## 🎯 这个版本多了什么功能？
+## 🎯 核心功能
 
-### ✨ 新增功能：自动管理 Worktree
+### ✨ 自动管理 Worktree
 
 当你使用 `/speckit.specify` 创建新特性时，本版本会**自动**创建独立的 Worktree 目录：
 
@@ -94,15 +94,11 @@ specify-worktree check
 ### 第 2 步：初始化项目
 
 ```bash
-# 创建新项目（默认启用 worktree 模式）
+# 创建新项目
 specify-worktree init my-project --ai claude
-
-# 如果需要传统模式（不使用 worktree）
-specify-worktree init my-project --no-worktree --ai claude
 
 # 在当前目录初始化
 specify-worktree init . --ai claude
-specify-worktree init . --no-worktree --ai claude  # 传统模式
 ```
 
 ### 第 3 步：启动 AI 助手
@@ -171,9 +167,8 @@ cd my-project
 ### CLI 命令
 
 ```bash
-# 初始化项目（默认启用 worktree）
+# 初始化项目
 specify-worktree init <project-name> --ai claude
-specify-worktree init <project-name> --no-worktree  # 传统模式
 
 # 在当前目录初始化
 specify-worktree init . --ai claude
@@ -193,6 +188,23 @@ specify-worktree check
 ```
 
 **重要**：你只需要使用这些 `/speckit.*` 命令，worktree 的创建和管理都是自动的！
+
+---
+
+## 🔄 从传统模式迁移
+
+如果你有使用 `--no-worktree` 初始化的现有项目：
+
+1. **现有项目仍然可用** - 不会影响现有功能
+2. **采用 worktree 模式以获得更好的特性隔离**：
+   ```bash
+   # 重新初始化以更新模板
+   specify init . --ai claude --force
+   ```
+3. **现有特性分支将继续工作**
+4. **新特性将自动使用 worktree 模式**
+
+**注意**：从 v0.0.25 开始，不再支持传统模式（`--no-worktree`）
 
 ---
 

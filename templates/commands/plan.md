@@ -1,6 +1,6 @@
 ---
-description: Execute the implementation planning workflow using the plan template to generate design artifacts.
-handoffs: 
+description: Execute the implementation planning workflow using the plan template to generate design artifacts (worktree mode).
+handoffs:
   - label: Create Tasks
     agent: speckit.tasks
     prompt: Break the plan into tasks
@@ -8,12 +8,13 @@ handoffs:
   - label: Create Checklist
     agent: speckit.checklist
     prompt: Create a checklist for the following domain...
-scripts:
-  sh: scripts/bash/setup-plan.sh --json
-  ps: scripts/powershell/setup-plan.ps1 -Json
-agent_scripts:
-  sh: scripts/bash/update-agent-context.sh __AGENT__
-  ps: scripts/powershell/update-agent-context.ps1 -AgentType __AGENT__
+mode: worktree
+allowed-tools:
+  - Bash(find:*)
+  - Bash(git:*)
+  - Bash(cd:*)
+  - Bash(cat:*)
+  - Read(*)
 ---
 
 ## User Input
@@ -26,13 +27,54 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-1. **Setup**: Run `{SCRIPT}` from the current working directory and parse JSON for FEATURE_SPEC, IMPL_PLAN, SPECS_DIR, BRANCH.
-   - The script automatically detects if you're in a worktree or main repo
-   - All paths returned are absolute paths to the correct location
-   - **IMPORTANT**: Do NOT change directory - stay in the current working directory
-   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+1. **Auto-detect worktree and feature directory**:
 
-2. **Load context**: Read FEATURE_SPEC and `/memory/constitution.md`. Load IMPL_PLAN template (already copied).
+   a. Find the spec file in worktrees:
+      ```bash
+      # Find the spec file in any worktree
+      SPEC_FILE=$(find ../../.wt -name "spec.md" -type f 2>/dev/null | head -1)
+
+      if [[ -z "$SPEC_FILE" ]]; then
+        echo "Error: No spec.md found in worktrees"
+        echo "Please run /speckit.specify first to create a worktree and spec"
+        exit 1
+      fi
+
+      # Extract worktree directory from spec file path
+      WORKTREE_DIR=$(dirname $(dirname $(dirname "$SPEC_FILE")))
+
+      # Change to the worktree directory
+      cd "$WORKTREE_DIR"
+
+      echo "Working in worktree: $WORKTREE_DIR"
+      ```
+
+   b. Find the feature directory:
+      ```bash
+      # Find the feature directory (contains spec.md)
+      FEATURE_DIR=$(find . -type d -name "FS-*" -exec test -f "{}/spec.md" \; -print | head -1)
+
+      if [[ -z "$FEATURE_DIR" ]]; then
+        echo "Error: No feature directory found in worktree"
+        exit 1
+      fi
+
+      echo "Feature directory: $FEATURE_DIR"
+      ```
+
+   c. Set required variables:
+      - FEATURE_SPEC: `$FEATURE_DIR/spec.md`
+      - IMPL_PLAN: `$FEATURE_DIR/plan.md`
+      - SPECS_DIR: `$FEATURE_DIR`
+      - BRANCH: Current git branch name
+
+   **IMPORTANT**:
+   - This command must be run from within a worktree
+   - The worktree is automatically detected by finding the spec.md file
+   - If no worktree is found, the command will error
+
+2. **Load context**: Read FEATURE_SPEC and `memory/constitution.md` from the
+   main repository root (constitution is a project-level artifact, not feature-specific). Load IMPL_PLAN template (already copied).
 
 3. **Execute plan workflow**: Follow the structure in IMPL_PLAN template to:
    - Fill Technical Context (mark unknowns as "NEEDS CLARIFICATION")
@@ -43,7 +85,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Phase 1: Update agent context by running the agent script
    - Re-evaluate Constitution Check post-design
 
-4. **Stop and report**: Command ends after Phase 2 planning. Report branch, IMPL_PLAN path, and generated artifacts.
+4. **Stop and report**: Command ends after Phase 2 planning. Report worktree name, branch, IMPL_PLAN path, and generated artifacts.
 
 ## Phases
 
@@ -63,7 +105,7 @@ You **MUST** consider the user input before proceeding (if not empty).
      Task: "Find best practices for {tech} in {domain}"
    ```
 
-3. **Consolidate findings** in `research.md` using format:
+3. **Consolidate findings** in `$FEATURE_DIR/research.md` using format:
    - Decision: [what was chosen]
    - Rationale: [why chosen]
    - Alternatives considered: [what else evaluated]
@@ -74,7 +116,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 **Prerequisites:** `research.md` complete
 
-1. **Extract entities from feature spec** → `data-model.md`:
+1. **Extract entities from feature spec** → `$FEATURE_DIR/data-model.md`:
    - Entity name, fields, relationships
    - Validation rules from requirements
    - State transitions if applicable
@@ -82,18 +124,20 @@ You **MUST** consider the user input before proceeding (if not empty).
 2. **Generate API contracts** from functional requirements:
    - For each user action → endpoint
    - Use standard REST/GraphQL patterns
-   - Output OpenAPI/GraphQL schema to `/contracts/`
+   - Output OpenAPI/GraphQL schema to `$FEATURE_DIR/contracts/`
 
 3. **Agent context update**:
-   - Run `{AGENT_SCRIPT}`
-   - These scripts detect which AI agent is in use
-   - Update the appropriate agent-specific context file
-   - Add only new technology from current plan
-   - Preserve manual additions between markers
+   ```bash
+   # Run the agent context update script directly from worktree
+   # The script internally uses $REPO_ROOT to find agent files
+   # and $IMPL_PLAN to find the plan file - no directory change needed!
+   bash .specify/scripts/bash/update-agent-context.sh
+   ```
 
 **Output**: data-model.md, /contracts/*, quickstart.md, agent-specific file
 
 ## Key rules
 
-- Use absolute paths
+- Use absolute paths when referencing files outside the worktree
 - ERROR on gate failures or unresolved clarifications
+- All outputs are created within the worktree's feature directory

@@ -1,13 +1,8 @@
 ---
-description: Execute the implementation plan by processing and executing all tasks defined in tasks.md (worktree mode).
-mode: worktree
-allowed-tools:
-  - Bash(find:*)
-  - Bash(git:*)
-  - Bash(cd:*)
-  - Read(*)
-  - Write(*)
-  - Edit(*)
+description: Execute the implementation plan by processing and executing all tasks defined in tasks.md
+scripts:
+  sh: scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks
+  ps: scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks
 ---
 
 ## User Input
@@ -20,47 +15,11 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-1. **Auto-detect worktree and feature directory**:
-
-   a. Find the spec file in worktrees:
-      ```bash
-      # Find the spec file in any worktree
-      SPEC_FILE=$(find ../../.wt -name "spec.md" -type f 2>/dev/null | head -1)
-
-      if [[ -z "$SPEC_FILE" ]]; then
-        echo "Error: No spec.md found in worktrees"
-        echo "Please run /speckit.specify first to create a worktree and spec"
-        exit 1
-      fi
-
-      # Extract worktree directory from spec file path
-      WORKTREE_DIR=$(dirname $(dirname $(dirname "$SPEC_FILE")))
-
-      # Change to the worktree directory
-      cd "$WORKTREE_DIR"
-
-      echo "Working in worktree: $WORKTREE_DIR"
-      ```
-
-   b. Find the feature directory:
-      ```bash
-      # Find the feature directory (contains spec.md)
-      FEATURE_DIR=$(find . -type d -name "FS-*" -exec test -f "{}/spec.md" \; -print | head -1)
-
-      if [[ -z "$FEATURE_DIR" ]]; then
-        echo "Error: No feature directory found in worktree"
-        exit 1
-      fi
-
-      echo "Feature directory: $FEATURE_DIR"
-      ```
-
-   c. Set FEATURE_DIR variable for use throughout the command
-
-   **IMPORTANT**:
-   - This command must be run from within a worktree
-   - The worktree is automatically detected by finding the spec.md file
-   - If no worktree is found, the command will error
+1. Run `{SCRIPT}` from the current working directory and parse FEATURE_DIR and AVAILABLE_DOCS list.
+   - All paths returned by the script are absolute paths to the correct location
+   - The script automatically detects if you're in a worktree or main repo
+   - **IMPORTANT**: Stay in the current directory for all file operations - do NOT cd to REPO_ROOT or any other directory
+   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
    - Scan all checklist files in the checklists/ directory
@@ -108,7 +67,6 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Check if the following command succeeds to determine if the repository is a git repo (create/verify .gitignore if so):
 
      ```sh
-     cd "$(git rev-parse --show-toplevel)"
      git rev-parse --git-dir 2>/dev/null
      ```
 
@@ -154,7 +112,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 6. Execute implementation following the task plan:
    - **Phase-by-phase execution**: Complete each phase before moving to the next
-   - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together
+   - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together  
    - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
    - **File-based coordination**: Tasks affecting the same files must run sequentially
    - **Validation checkpoints**: Verify each phase completion before proceeding
@@ -172,7 +130,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - For parallel tasks [P], continue with successful tasks, report failed ones
    - Provide clear error messages with context for debugging
    - Suggest next steps if implementation cannot proceed
-   - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file
+   - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
 
 9. Completion validation:
    - Verify all required tasks are completed

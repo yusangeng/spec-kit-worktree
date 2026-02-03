@@ -1,6 +1,6 @@
 ---
-description: Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts (worktree mode).
-handoffs:
+description: Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts.
+handoffs: 
   - label: Analyze For Consistency
     agent: speckit.analyze
     prompt: Run a project analysis for consistency
@@ -9,12 +9,9 @@ handoffs:
     agent: speckit.implement
     prompt: Start the implementation in phases
     send: true
-mode: worktree
-allowed-tools:
-  - Bash(find:*)
-  - Bash(git:*)
-  - Bash(cd:*)
-  - Read(*)
+scripts:
+  sh: scripts/bash/check-prerequisites.sh --json
+  ps: scripts/powershell/check-prerequisites.ps1 -Json
 ---
 
 ## User Input
@@ -27,47 +24,11 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-1. **Auto-detect worktree and feature directory**:
-
-   a. Find the spec file in worktrees:
-      ```bash
-      # Find the spec file in any worktree
-      SPEC_FILE=$(find ../../.wt -name "spec.md" -type f 2>/dev/null | head -1)
-
-      if [[ -z "$SPEC_FILE" ]]; then
-        echo "Error: No spec.md found in worktrees"
-        echo "Please run /speckit.specify first to create a worktree and spec"
-        exit 1
-      fi
-
-      # Extract worktree directory from spec file path
-      WORKTREE_DIR=$(dirname $(dirname $(dirname "$SPEC_FILE")))
-
-      # Change to the worktree directory
-      cd "$WORKTREE_DIR"
-
-      echo "Working in worktree: $WORKTREE_DIR"
-      ```
-
-   b. Find the feature directory:
-      ```bash
-      # Find the feature directory (contains spec.md)
-      FEATURE_DIR=$(find . -type d -name "FS-*" -exec test -f "{}/spec.md" \; -print | head -1)
-
-      if [[ -z "$FEATURE_DIR" ]]; then
-        echo "Error: No feature directory found in worktree"
-        exit 1
-      fi
-
-      echo "Feature directory: $FEATURE_DIR"
-      ```
-
-   c. Set FEATURE_DIR variable for use throughout the command
-
-   **IMPORTANT**:
-   - This command must be run from within a worktree
-   - The worktree is automatically detected by finding the spec.md file
-   - If no worktree is found, the command will error
+1. **Setup**: Run `{SCRIPT}` from the current working directory and parse FEATURE_DIR and AVAILABLE_DOCS list.
+   - All paths returned by the script are absolute paths to the correct location
+   - The script automatically detects if you're in a worktree or main repo
+   - **IMPORTANT**: Stay in the current directory for all operations - do NOT change directories
+   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **Load design documents**: Read from FEATURE_DIR:
    - **Required**: plan.md (tech stack, libraries, structure), spec.md (user stories with priorities)
@@ -132,7 +93,7 @@ Every task MUST strictly follow this format:
 4. **[Story] label**: REQUIRED for user story phase tasks only
    - Format: [US1], [US2], [US3], etc. (maps to user stories from spec.md)
    - Setup phase: NO story label
-   - Foundational phase: NO story label
+   - Foundational phase: NO story label  
    - User Story phases: MUST have story label
    - Polish phase: NO story label
 5. **Description**: Clear action with exact file path

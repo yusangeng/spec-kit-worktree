@@ -1,6 +1,6 @@
 ---
-description: Create or update the feature specification from a natural language feature description.
-handoffs: 
+description: Create or update the feature specification from a natural language feature description (worktree mode).
+handoffs:
   - label: Build Technical Plan
     agent: speckit.plan
     prompt: Create a plan for the spec. I am building with...
@@ -8,9 +8,12 @@ handoffs:
     agent: speckit.clarify
     prompt: Clarify specification requirements
     send: true
-scripts:
-  sh: scripts/bash/create-new-feature.sh --json "{ARGS}"
-  ps: scripts/powershell/create-new-feature.ps1 -Json "{ARGS}"
+mode: worktree
+allowed-tools:
+  - Bash(.specify/scripts/bash/create-worktree.sh:*)
+  - Bash(git:*)
+  - Bash(find:*)
+  - Bash(cd:*)
 ---
 
 ## User Input
@@ -27,10 +30,10 @@ The text the user typed after `/speckit.specify` in the triggering message **is*
 
 Given that feature description, do this:
 
-1. **Generate a concise short name** (2-4 words) for the branch:
+1. **Generate a concise short name** (kebab-case) for the feature:
    - Analyze the feature description and extract the most meaningful keywords
-   - Create a 2-4 word short name that captures the essence of the feature
-   - Use action-noun format when possible (e.g., "add-user-auth", "fix-payment-bug")
+   - Create a short name using kebab-case (lowercase with hyphens)
+   - Use action-noun format when possible (e.g., "user-auth", "oauth2-api-integration")
    - Preserve technical terms and acronyms (OAuth2, API, JWT, etc.)
    - Keep it concise but descriptive enough to understand the feature at a glance
    - Examples:
@@ -39,37 +42,40 @@ Given that feature description, do this:
      - "Create a dashboard for analytics" → "analytics-dashboard"
      - "Fix payment processing timeout bug" → "fix-payment-timeout"
 
-2. **Check for existing branches before creating new one**:
+2. **Create a worktree for this feature**:
 
-   a. First, fetch all remote branches to ensure we have the latest information:
-
+   a. Navigate to the repository root:
       ```bash
-      git fetch --all --prune
+      cd "$(git rev-parse --show-toplevel)"
       ```
 
-   b. Find the highest feature number across all sources for the short-name:
-      - Remote branches: `git ls-remote --heads origin | grep -E 'refs/heads/[0-9]+-<short-name>$'`
-      - Local branches: `git branch | grep -E '^[* ]*[0-9]+-<short-name>$'`
-      - Specs directories: Check for directories matching `specs/[0-9]+-<short-name>`
+   b. Create the worktree using the short name:
+      ```bash
+      .specify/scripts/bash/create-worktree.sh <short-name>
+      ```
 
-   c. Determine the next available number:
-      - Extract all numbers from all three sources
-      - Find the highest number N
-      - Use N+1 for the new branch number
+   c. Change to the worktree directory:
+      ```bash
+      cd .wt/<short-name>
+      ```
 
-   d. Run the script `{SCRIPT}` with the calculated number and short-name:
-      - Pass `--number N+1` and `--short-name "your-short-name"` along with the feature description
-      - Bash example: `{SCRIPT} --json --number 5 --short-name "user-auth" "Add user authentication"`
-      - PowerShell example: `{SCRIPT} -Json -Number 5 -ShortName "user-auth" "Add user authentication"`
+   d. Determine the feature number:
+      - List all existing feature directories in `.wt/`: `ls -d ../.wt/*/ 2>/dev/null`
+      - Find the highest feature number used (format: FS-NNNN-*)
+      - Use the next available number
+
+   e. Create the feature directory structure:
+      ```bash
+      FEATURE_DIR="specs/FS-NNNN-<domain>-<short-name>-v1"
+      mkdir -p "$FEATURE_DIR"
+      ```
 
    **IMPORTANT**:
-   - Check all three sources (remote branches, local branches, specs directories) to find the highest number
-   - Only match branches/directories with the exact short-name pattern
-   - If no existing branches/directories found with this short-name, start with number 1
-   - You must only ever run this script once per feature
-   - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for
-   - The JSON output will contain BRANCH_NAME and SPEC_FILE paths
-   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
+   - The worktree command creates an isolated working directory for this feature
+   - Each feature gets its own worktree, allowing parallel development
+   - The worktree is created from the base branch (main/master/develop)
+   - You must create the worktree before creating the spec file
+   - The worktree path will be `.wt/<short-name>/` relative to repo root
 
 3. Load `templates/spec-template.md` to understand required sections.
 
@@ -99,28 +105,28 @@ Given that feature description, do this:
     7. Identify Key Entities (if data involved)
     8. Return: SUCCESS (spec ready for planning)
 
-5. Write the specification to SPEC_FILE using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
+5. Write the specification to `$FEATURE_DIR/spec.md` using the template structure, replacing placeholders with concrete details derived from the feature description (arguments) while preserving section order and headings.
 
 6. **Specification Quality Validation**: After writing the initial spec, validate it against quality criteria:
 
-   a. **Create Spec Quality Checklist**: Generate a checklist file at `FEATURE_DIR/checklists/requirements.md` using the checklist template structure with these validation items:
+   a. **Create Spec Quality Checklist**: Generate a checklist file at `$FEATURE_DIR/checklists/requirements.md` using the checklist template structure with these validation items:
 
       ```markdown
       # Specification Quality Checklist: [FEATURE NAME]
-      
+
       **Purpose**: Validate specification completeness and quality before proceeding to planning
       **Created**: [DATE]
       **Feature**: [Link to spec.md]
-      
+
       ## Content Quality
-      
+
       - [ ] No implementation details (languages, frameworks, APIs)
       - [ ] Focused on user value and business needs
       - [ ] Written for non-technical stakeholders
       - [ ] All mandatory sections completed
-      
+
       ## Requirement Completeness
-      
+
       - [ ] No [NEEDS CLARIFICATION] markers remain
       - [ ] Requirements are testable and unambiguous
       - [ ] Success criteria are measurable
@@ -129,16 +135,16 @@ Given that feature description, do this:
       - [ ] Edge cases are identified
       - [ ] Scope is clearly bounded
       - [ ] Dependencies and assumptions identified
-      
+
       ## Feature Readiness
-      
+
       - [ ] All functional requirements have clear acceptance criteria
       - [ ] User scenarios cover primary flows
       - [ ] Feature meets measurable outcomes defined in Success Criteria
       - [ ] No implementation details leak into specification
-      
+
       ## Notes
-      
+
       - Items marked incomplete require spec updates before `/speckit.clarify` or `/speckit.plan`
       ```
 
@@ -163,20 +169,20 @@ Given that feature description, do this:
 
            ```markdown
            ## Question [N]: [Topic]
-           
+
            **Context**: [Quote relevant spec section]
-           
+
            **What we need to know**: [Specific question from NEEDS CLARIFICATION marker]
-           
+
            **Suggested Answers**:
-           
+
            | Option | Answer | Implications |
            |--------|--------|--------------|
            | A      | [First suggested answer] | [What this means for the feature] |
            | B      | [Second suggested answer] | [What this means for the feature] |
            | C      | [Third suggested answer] | [What this means for the feature] |
            | Custom | Provide your own answer | [Explain how to provide custom input] |
-           
+
            **Your choice**: _[Wait for user response]_
            ```
 
@@ -193,9 +199,9 @@ Given that feature description, do this:
 
    d. **Update Checklist**: After each validation iteration, update the checklist file with current pass/fail status
 
-7. Report completion with branch name, spec file path, checklist results, and readiness for the next phase (`/speckit.clarify` or `/speckit.plan`).
+7. Report completion with worktree name, feature directory, spec file path, checklist results, and readiness for the next phase (`/speckit.clarify` or `/speckit.plan`).
 
-**NOTE:** The script creates and checks out the new branch and initializes the spec file before writing.
+**NOTE:** This command creates a worktree for isolated feature development, then creates the spec file within that worktree.
 
 ## General Guidelines
 

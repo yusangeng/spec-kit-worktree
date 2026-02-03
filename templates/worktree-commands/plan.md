@@ -73,7 +73,8 @@ You **MUST** consider the user input before proceeding (if not empty).
    - The worktree is automatically detected by finding the spec.md file
    - If no worktree is found, the command will error
 
-2. **Load context**: Read FEATURE_SPEC and `/memory/constitution.md`. Load IMPL_PLAN template (already copied).
+2. **Load context**: Read FEATURE_SPEC and `memory/constitution.md` from the
+   main repository root (constitution is a project-level artifact, not feature-specific). Load IMPL_PLAN template (already copied).
 
 3. **Execute plan workflow**: Follow the structure in IMPL_PLAN template to:
    - Fill Technical Context (mark unknowns as "NEEDS CLARIFICATION")

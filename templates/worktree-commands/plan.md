@@ -127,12 +127,12 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Output OpenAPI/GraphQL schema to `$FEATURE_DIR/contracts/`
 
 3. **Agent context update**:
-   - Navigate to repo root: `cd "$(git rev-parse --show-toplevel)"`
-   - Run the appropriate agent context update script
-   - Update the agent-specific context file
-   - Add only new technology from current plan
-   - Preserve manual additions between markers
-   - Return to worktree: `cd "$WORKTREE_DIR"`
+   ```bash
+   # Run the agent context update script directly from worktree
+   # The script internally uses $REPO_ROOT to find agent files
+   # and $IMPL_PLAN to find the plan file - no directory change needed!
+   bash .specify/scripts/bash/update-agent-context.sh
+   ```
 
 **Output**: data-model.md, /contracts/*, quickstart.md, agent-specific file
 
